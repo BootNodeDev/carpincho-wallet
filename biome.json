@@ -1,0 +1,65 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "vcs": {
+    "clientKind": "git",
+    "enabled": true,
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": ["src/**", "test/**", "vite.config.ts", "*.json", "*.mjs", "*.js"]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/**", "test/**"],
+      "formatter": {
+        "attributePosition": "multiline"
+      },
+      "css": {
+        "parser": {
+          "cssModules": false,
+          "tailwindDirectives": true
+        }
+      },
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["./**", "../**"],
+                    "message": "Use the '@/' alias instead of relative imports."
+                  },
+                  {
+                    "group": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
+                    "message": "Do not include the file extension in imports."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
