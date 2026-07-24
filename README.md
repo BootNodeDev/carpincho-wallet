@@ -13,8 +13,8 @@ dApp frontend -> injected CIP-0103 provider -> carpincho-wallet -> wallet-servic
 ### From source
 
 ```bash
-npm install
-npm run build:extension
+pnpm install
+pnpm run build:extension
 ```
 
 The build output is `dist-extension`.

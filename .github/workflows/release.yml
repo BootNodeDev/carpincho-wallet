@@ -19,14 +19,16 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: package-lock.json
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
         env:
           HUSKY: 0 # disable git hooks in CI checkout
 
@@ -35,7 +37,7 @@ jobs:
           VERSION="${TAG#v}"
           PKG_VERSION="$(node -p "require('./package.json').version")"
           if [ "$VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::Release tag \"$TAG\" (version \"$VERSION\") does not match package.json version \"$PKG_VERSION\". Bump it with 'npm version' and tag that commit."
+            echo "::error::Release tag \"$TAG\" (version \"$VERSION\") does not match package.json version \"$PKG_VERSION\". Bump it with 'pnpm version' and tag that commit."
             exit 1
           fi
           export VERSION
@@ -54,13 +56,13 @@ jobs:
           echo "resolved version $VERSION"
 
       - name: Lint
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Build extension
-        run: npm run build:extension
+        run: pnpm run build:extension
 
       - name: Test
-        run: npm run test
+        run: pnpm run test
 
       - name: Zip extension
         run: |
