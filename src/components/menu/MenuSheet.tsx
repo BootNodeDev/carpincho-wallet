@@ -54,7 +54,7 @@ export const MenuSheet = ({ open, onOpenChange }: MenuSheetProps): JSX.Element =
     setScreen(parent)
   }
 
-  const onLogout = (): void => {
+  const onLock = (): void => {
     v.lock()
     onOpenChange(false)
   }
@@ -90,7 +90,7 @@ export const MenuSheet = ({ open, onOpenChange }: MenuSheetProps): JSX.Element =
           <MenuList
             rows={list}
             onNavigate={goTo}
-            onLogout={onLogout}
+            onLock={onLock}
           />
         )}
         {screen === 'wallet-connect' && (

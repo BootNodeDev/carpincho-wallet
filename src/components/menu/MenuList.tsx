@@ -6,10 +6,10 @@ export const MENU_LIST_CLASS = 'flex flex-col gap-2 list-none m-0 p-0'
 interface MenuListProps {
   rows: MenuListRow[]
   onNavigate: (screen: Screen) => void
-  onLogout: () => void
+  onLock: () => void
 }
 
-export const MenuList = ({ rows, onNavigate, onLogout }: MenuListProps): JSX.Element => (
+export const MenuList = ({ rows, onNavigate, onLock }: MenuListProps): JSX.Element => (
   <ul className={MENU_LIST_CLASS}>
     {rows.map(({ label, to, tone, icon }) => (
       <MenuRow
@@ -18,7 +18,7 @@ export const MenuList = ({ rows, onNavigate, onLogout }: MenuListProps): JSX.Ele
         tone={tone}
         icon={icon}
         testId={`menu-row-${to}`}
-        onClick={to === 'logout' ? onLogout : () => onNavigate(to)}
+        onClick={to === 'lock' ? onLock : () => onNavigate(to)}
       />
     ))}
   </ul>
