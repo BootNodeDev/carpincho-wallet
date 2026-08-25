@@ -7,8 +7,6 @@ export const WalletEvent = {
   SPLICE_WALLET_EXT_READY: 'SPLICE_WALLET_EXT_READY',
   SPLICE_WALLET_EXT_ACK: 'SPLICE_WALLET_EXT_ACK',
   SPLICE_WALLET_EXT_OPEN: 'SPLICE_WALLET_EXT_OPEN',
-  // Carpincho extension: wallet → page push for dapp-api event methods.
-  SPLICE_WALLET_EVENT: 'SPLICE_WALLET_EVENT',
 } as const
 
 type WalletEventValue<K extends keyof typeof WalletEvent> = (typeof WalletEvent)[K]
@@ -104,7 +102,10 @@ export const isSpliceWalletRequest = (value: unknown): value is SpliceWalletRequ
   value.type === WalletEvent.SPLICE_WALLET_REQUEST &&
   isRecord(value.request) &&
   value.request.jsonrpc === '2.0' &&
-  typeof value.request.method === 'string'
+  typeof value.request.method === 'string' &&
+  // An id-less request is a notification: a wallet event on its way to the page, never a
+  // dApp call for the wallet to answer. Kept in step with contentScript's own copy.
+  value.request.id !== undefined
 
 export const extensionAck = (): SpliceWalletAckMessage => ({
   type: WalletEvent.SPLICE_WALLET_EXT_ACK,

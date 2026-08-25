@@ -53,6 +53,14 @@ describe('extension postMessage bridge', () => {
       }),
       true,
     )
+    // An id-less frame is a notification (a wallet event), not a request to answer
+    assert.equal(
+      isSpliceWalletRequest({
+        type: WalletEvent.SPLICE_WALLET_REQUEST,
+        request: { jsonrpc: '2.0', method: 'statusChanged', params: {} },
+      }),
+      false,
+    )
   })
 
   it('uses the extension action popup instead of opening tabs or windows', () => {

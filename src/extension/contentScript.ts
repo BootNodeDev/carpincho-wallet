@@ -7,7 +7,6 @@ const WalletEvent = {
   SPLICE_WALLET_RESPONSE: 'SPLICE_WALLET_RESPONSE',
   SPLICE_WALLET_EXT_READY: 'SPLICE_WALLET_EXT_READY',
   SPLICE_WALLET_EXT_ACK: 'SPLICE_WALLET_EXT_ACK',
-  SPLICE_WALLET_EVENT: 'SPLICE_WALLET_EVENT',
 } as const
 
 const CANTON_REQUEST_PROVIDER_EVENT = 'canton:requestProvider'
@@ -67,7 +66,10 @@ const isSpliceWalletRequest = (value: unknown): value is SpliceWalletRequestMess
   value.type === WalletEvent.SPLICE_WALLET_REQUEST &&
   isRecord(value.request) &&
   value.request.jsonrpc === '2.0' &&
-  typeof value.request.method === 'string'
+  typeof value.request.method === 'string' &&
+  // An id-less request is a notification: a wallet event on its way to the page, never a
+  // dApp call for this wallet to answer.
+  value.request.id !== undefined
 
 const extensionAck = (): {
   type: typeof WalletEvent.SPLICE_WALLET_EXT_ACK
@@ -92,13 +94,6 @@ interface RuntimeEventRelay {
   type: 'CARPINCHO_EVENT_RELAY'
   eventName: string
   payload: unknown
-}
-
-interface SpliceWalletEventMessage {
-  type: typeof WalletEvent.SPLICE_WALLET_EVENT
-  eventName: string
-  payload: unknown
-  target: typeof CARPINCHO_PROVIDER_ID
 }
 
 type RuntimeApi = {
@@ -168,10 +163,11 @@ const isRuntimeEventRelay = (value: unknown): value is RuntimeEventRelay =>
   typeof (value as { eventName?: unknown }).eventName === 'string'
 
 const forwardEventToPage = (message: RuntimeEventRelay): void => {
-  const out: SpliceWalletEventMessage = {
-    type: WalletEvent.SPLICE_WALLET_EVENT,
-    eventName: message.eventName,
-    payload: message.payload,
+  // The dapp-sdk reads wallet events as id-less SPLICE_WALLET_REQUEST notifications; the
+  // SPLICE_WALLET_EVENT frame shape is a dialect no published SDK parses.
+  const out: SpliceWalletRequestMessage = {
+    type: WalletEvent.SPLICE_WALLET_REQUEST,
+    request: { jsonrpc: '2.0', method: message.eventName, params: message.payload },
     target: CARPINCHO_PROVIDER_ID,
   }
   window.postMessage(out, '*')
