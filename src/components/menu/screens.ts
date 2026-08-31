@@ -63,7 +63,7 @@ export const SCREENS: Record<Screen, ScreenConfig> = {
 
 export interface MenuListRow {
   label: string
-  to: Screen | 'logout'
+  to: Screen | 'lock'
   tone?: 'danger'
   icon?: ReactNode
 }
@@ -75,7 +75,8 @@ export const MENU_LISTS: Partial<Record<Screen, MenuListRow[]>> = {
     { label: 'WalletConnect', to: 'wallet-connect', icon: WALLET_CONNECT_ICON },
     { label: 'Theme', to: 'theme' },
     { label: 'Vault', to: 'vault' },
-    { label: 'Log out', to: 'logout', tone: 'danger' },
+    // 'Lock', not 'Log out': the vault locks and every dApp session survives to the next unlock.
+    { label: 'Lock', to: 'lock' },
   ],
   vault: [
     { label: 'Password', to: 'password' },
