@@ -9,6 +9,7 @@ import {
 } from '@/extension/directConnections'
 import { createDirectProviderResponse } from '@/extension/directProvider'
 import {
+  CARPINCHO_PROVIDER_ID,
   type JsonRpcRequest,
   type JsonRpcResponse,
   jsonRpcError,
@@ -90,6 +91,31 @@ const relayBroadcastToTabs = async (message: RuntimeBroadcastEvent): Promise<voi
     type: 'CARPINCHO_EVENT_RELAY',
     eventName: message.eventName,
     payload: message.payload,
+  }
+  await Promise.all(
+    tabs.map((tab) => {
+      if (tab.id === undefined) {
+        return Promise.resolve()
+      }
+      return chromeApi?.tabs?.sendMessage(tab.id, relay).catch(() => undefined)
+    }),
+  )
+}
+
+// A wallet-initiated disconnect targets one origin directly: the general relay reads the
+// connected-origins list this disconnect is about to leave, and must not reach other dApps.
+const relayDisconnectToOrigin = async (origin: string): Promise<void> => {
+  const tabs = await chromeApi?.tabs?.query({ url: `${origin}/*` }).catch(() => [])
+  if (tabs === undefined) {
+    return
+  }
+  const relay: RuntimeEventRelay = {
+    type: 'CARPINCHO_EVENT_RELAY',
+    eventName: 'statusChanged',
+    payload: {
+      provider: { id: CARPINCHO_PROVIDER_ID, providerType: 'browser' },
+      connection: { isConnected: false, isNetworkConnected: true },
+    },
   }
   await Promise.all(
     tabs.map((tab) => {
@@ -229,7 +255,10 @@ chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === 'CARPINCHO_FORGET_CONNECTED_ORIGIN') {
-    void forgetDirectConnectedOrigin(message.origin)
+    // Without this the dApp never learns it was disconnected: nothing is pushed and the
+    // relay list stops covering it, so its session face just goes stale.
+    void relayDisconnectToOrigin(message.origin)
+      .then(() => forgetDirectConnectedOrigin(message.origin))
       .then(sendResponse)
       .catch(() => sendResponse([]))
     return true
