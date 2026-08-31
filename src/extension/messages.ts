@@ -105,7 +105,7 @@ export const isSpliceWalletRequest = (value: unknown): value is SpliceWalletRequ
   typeof value.request.method === 'string' &&
   // An id-less request is a notification: a wallet event on its way to the page, never a
   // dApp call for the wallet to answer. Kept in step with contentScript's own copy.
-  value.request.id !== undefined
+  (typeof value.request.id === 'string' || typeof value.request.id === 'number')
 
 export const extensionAck = (): SpliceWalletAckMessage => ({
   type: WalletEvent.SPLICE_WALLET_EXT_ACK,
