@@ -1,7 +1,9 @@
 import { strict as assert } from 'node:assert'
-import { before, describe, it } from 'node:test'
+import { after, before, describe, it } from 'node:test'
 
 type Listener = (message: unknown) => void
+
+const originalChrome = (globalThis as { chrome?: unknown }).chrome
 
 const runtimeMessages: unknown[] = []
 let relayListener: Listener | undefined
@@ -28,6 +30,10 @@ before(async () => {
     },
   })
   await import('@/extension/contentScript')
+})
+
+after(() => {
+  Object.defineProperty(globalThis, 'chrome', { configurable: true, value: originalChrome })
 })
 
 const pageMessages = async (during: () => void | Promise<void>): Promise<unknown[]> => {
