@@ -76,7 +76,7 @@ describe('MenuSheet', () => {
     assert.ok(screen.getByRole('button', { name: /walletconnect/i }))
     assert.ok(screen.getByRole('button', { name: /^theme$/i }))
     assert.ok(screen.getByRole('button', { name: /^vault$/i }))
-    assert.ok(screen.getByRole('button', { name: /log out/i }))
+    assert.ok(screen.getByRole('button', { name: /^lock$/i }))
   })
 
   it('renders nothing when closed', () => {
@@ -160,7 +160,7 @@ describe('MenuSheet', () => {
     assert.ok(screen.getByLabelText(/backup password/i))
   })
 
-  it('log out calls vault.lock and closes the sheet', async () => {
+  it('lock calls vault.lock and closes the sheet', async () => {
     const user = userEvent.setup()
     let lockCalls = 0
     const openChanges: boolean[] = []
@@ -177,7 +177,7 @@ describe('MenuSheet', () => {
         />,
       ),
     )
-    await user.click(screen.getByRole('button', { name: /log out/i }))
+    await user.click(screen.getByRole('button', { name: /^lock$/i }))
     assert.equal(lockCalls, 1)
     assert.deepEqual(openChanges, [false])
   })
