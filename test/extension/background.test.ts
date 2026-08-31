@@ -1,7 +1,9 @@
 import { strict as assert } from 'node:assert'
-import { before, describe, it } from 'node:test'
+import { after, before, describe, it } from 'node:test'
 import { DIRECT_CONNECTED_ORIGINS_KEY } from '@/extension/directConnections'
 import type { RuntimeEventRelay } from '@/extension/messages'
+
+const originalChrome = (globalThis as { chrome?: unknown }).chrome
 
 type Listener = (
   message: unknown,
@@ -54,6 +56,10 @@ before(async () => {
     },
   })
   await import('@/extension/background')
+})
+
+after(() => {
+  Object.defineProperty(globalThis, 'chrome', { configurable: true, value: originalChrome })
 })
 
 describe('background: CARPINCHO_FORGET_CONNECTED_ORIGIN', () => {
