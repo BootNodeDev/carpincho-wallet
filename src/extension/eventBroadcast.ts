@@ -1,5 +1,5 @@
-// Push a dapp-api event to content-script pages via
-// chrome.runtime → background.ts → chrome.tabs → SPLICE_WALLET_EVENT.
+// Push a dapp-api event to content-script pages via chrome.runtime → background.ts →
+// chrome.tabs, posted to the page as an id-less SPLICE_WALLET_REQUEST notification.
 // No-op on the web variant where chrome.runtime is undefined.
 
 import type { RuntimeBroadcastEvent } from '@/extension/messages'

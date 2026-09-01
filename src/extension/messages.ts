@@ -7,8 +7,6 @@ export const WalletEvent = {
   SPLICE_WALLET_EXT_READY: 'SPLICE_WALLET_EXT_READY',
   SPLICE_WALLET_EXT_ACK: 'SPLICE_WALLET_EXT_ACK',
   SPLICE_WALLET_EXT_OPEN: 'SPLICE_WALLET_EXT_OPEN',
-  // Carpincho extension: wallet → page push for dapp-api event methods.
-  SPLICE_WALLET_EVENT: 'SPLICE_WALLET_EVENT',
 } as const
 
 type WalletEventValue<K extends keyof typeof WalletEvent> = (typeof WalletEvent)[K]
@@ -35,6 +33,10 @@ export interface SpliceWalletRequestMessage {
   type: WalletEventValue<'SPLICE_WALLET_REQUEST'>
   request: JsonRpcRequest
   target?: string
+}
+
+export type SpliceWalletCallMessage = SpliceWalletRequestMessage & {
+  request: JsonRpcRequest & { id: string | number }
 }
 
 export interface SpliceWalletAckMessage {
@@ -99,12 +101,15 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
 export const isForCarpincho = (message: { target?: unknown }): boolean =>
   message.target === undefined || message.target === CARPINCHO_PROVIDER_ID
 
-export const isSpliceWalletRequest = (value: unknown): value is SpliceWalletRequestMessage =>
+export const isSpliceWalletRequest = (value: unknown): value is SpliceWalletCallMessage =>
   isRecord(value) &&
   value.type === WalletEvent.SPLICE_WALLET_REQUEST &&
   isRecord(value.request) &&
   value.request.jsonrpc === '2.0' &&
-  typeof value.request.method === 'string'
+  typeof value.request.method === 'string' &&
+  // An id-less request is a notification: a wallet event on its way to the page, never a
+  // dApp call for the wallet to answer. Kept in step with contentScript's own copy.
+  (typeof value.request.id === 'string' || typeof value.request.id === 'number')
 
 export const extensionAck = (): SpliceWalletAckMessage => ({
   type: WalletEvent.SPLICE_WALLET_EXT_ACK,
