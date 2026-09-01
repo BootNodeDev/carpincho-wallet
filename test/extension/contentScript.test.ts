@@ -61,25 +61,19 @@ const announcedProvider = (): Record<string, unknown> => {
 }
 
 describe('contentScript provider announcement', () => {
-  it('announces the wallet icon as an inline data URI, not a chrome-extension URL', () => {
+  it('announces the shipped PNG as an inline data URI, not a chrome-extension URL', () => {
     // Scenario: the dApp SDK picker renders in a blob: document and types the announced icon
-    // as a data or https URL, so a chrome-extension:// URL would render a broken image.
-    const detail = announcedProvider()
-
-    assert.equal(detail.id, 'carpincho-wallet')
-    assert.equal(typeof detail.icon, 'string')
-    const icon = detail.icon as string
-    assert.match(icon, /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/)
-    assert.doesNotMatch(icon, /^chrome-extension:/)
-  })
-
-  it('encodes the same PNG the manifest ships as the toolbar icon', () => {
-    const detail = announcedProvider()
-    const expected = readFileSync(
+    // as a data or https URL, so a chrome-extension:// URL would render a broken image. The
+    // expected value is read from the PNG rather than from the injected global, so the
+    // announcement has to carry the bytes the manifest ships as the toolbar icon.
+    const encoded = readFileSync(
       new URL('../../public/icons/carpincho-48.png', import.meta.url),
     ).toString('base64')
 
-    assert.equal(detail.icon, `data:image/png;base64,${expected}`)
+    const detail = announcedProvider()
+
+    assert.equal(detail.id, 'carpincho-wallet')
+    assert.equal(detail.icon, `data:image/png;base64,${encoded}`)
   })
 })
 

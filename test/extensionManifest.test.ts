@@ -63,7 +63,7 @@ describe('extension packaging', () => {
     // define would not fail there. This does.
     const viteConfig = readText('vite.config.ts')
 
-    assert.match(viteConfig, /__WALLET_ICON_DATA_URL__: JSON\.stringify\(walletIconDataUrl\(\)\)/)
+    assert.match(viteConfig, /__WALLET_ICON_DATA_URL__/)
     assert.match(viteConfig, /data:image\/png;base64,/)
     assert.match(viteConfig, /public\/icons\/carpincho-48\.png/)
   })

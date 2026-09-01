@@ -18,12 +18,13 @@ const appVersion = pkg.version
 const manifestVersion = appVersion.split(/[-+]/)[0]
 
 // The icon the content script announces to a dApp, inlined from the same PNG the manifest
-// ships as the toolbar icon. The Canton dApp SDK types AnnouncedProvider.icon as a data URL
-// or an https URL, and its wallet picker renders in a blob: document, so an extension URL is
-// not loadable there; declaring the PNG in web_accessible_resources would expose it to every
-// page without fixing the blob: context, hence the inline copy.
-const walletIconDataUrl = (): string =>
-  `data:image/png;base64,${readFileSync(resolve(__dirname, 'public/icons/carpincho-48.png')).toString('base64')}`
+// ships as the toolbar icon: the SDK types AnnouncedProvider.icon as a data or https URL, and
+// its wallet picker renders in a blob: document that cannot load an extension URL. A define
+// rather than an asset import because public/ files are not part of the module graph, and
+// Vite's inline threshold would silently emit a URL again once the PNG grows past 4 KB.
+const walletIconDataUrl = `data:image/png;base64,${readFileSync(
+  resolve(__dirname, 'public/icons/carpincho-48.png'),
+).toString('base64')}`
 
 const injectManifestVersion = (): Plugin => ({
   name: 'carpincho-manifest-version',
@@ -43,8 +44,7 @@ export default defineConfig(({ mode }) => {
     base: isExtension ? './' : '/',
     define: {
       __APP_VERSION__: JSON.stringify(appVersion),
-      // Only the content script reads it, and only the extension build bundles that entry.
-      ...(isExtension ? { __WALLET_ICON_DATA_URL__: JSON.stringify(walletIconDataUrl()) } : {}),
+      __WALLET_ICON_DATA_URL__: JSON.stringify(walletIconDataUrl),
     },
     plugins: [tailwindcss(), react(), ...(isExtension ? [injectManifestVersion()] : [])],
     resolve: {
