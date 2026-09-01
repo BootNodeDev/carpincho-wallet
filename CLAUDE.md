@@ -1,3 +1,5 @@
+<!-- starter-kit: v2026.08 -->
+
 # Agent Configuration — carpincho-wallet
 
 This is the canonical agent configuration for the `carpincho-wallet` repository — the CIP-0103 Canton wallet, extracted from the `cn-dappbooster` monorepo into its own repo. `AGENTS.md` is a compatibility shim that points here.
@@ -80,6 +82,24 @@ Use [Conventional Commits](https://www.conventionalcommits.org/). Enforced by [`
 - Keep PRs small and focused — one issue, one PR.
 - PR titles use the same Conventional Commit format (`feat: add user dashboard`).
 - The PR body follows [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
+- Use `/sdlc:create-pr` to create PRs — it reads the template and fills every section automatically.
+
+## Label Conventions
+
+GitHub form dropdowns (like the Priority field in issue templates) only work through the web UI. When issues are created via `gh` CLI or REST API, dropdown values become unstructured body text: not queryable, not consistent. **Labels are the API-reliable mechanism for structured metadata.**
+
+**Priority** (bugs, features, and epics):
+
+| Label | Description |
+|-------|-------------|
+| `priority: critical` | Blocking work, system down, or security issue |
+| `priority: high` | Must be addressed in current sprint |
+| `priority: medium` | Should be addressed soon |
+| `priority: low` | Nice to have, can wait |
+
+Labels are queryable: `gh issue list --label "priority: high"`.
+
+The `/sdlc:create-issue` skill applies these labels automatically when creating issues via CLI. Bug, feature, and epic templates include a Priority dropdown for web UI users, but labels are the source of truth for programmatic workflows.
 
 ## Guardrails
 
