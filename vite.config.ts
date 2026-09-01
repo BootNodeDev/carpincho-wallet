@@ -17,6 +17,14 @@ const appVersion = pkg.version
 // prerelease/build metadata (e.g. 1.2.0-rc.1 -> 1.2.0).
 const manifestVersion = appVersion.split(/[-+]/)[0]
 
+// The Canton dApp SDK types AnnouncedProvider.icon as a data URL or an https URL, and its
+// wallet picker renders in a blob: document that cannot load a chrome-extension:// URL (the
+// unpacked extension id changes between installs anyway). Inline the same PNG the manifest
+// ships so the announced icon travels with the announcement.
+const walletIconDataUrl = `data:image/png;base64,${readFileSync(
+  resolve(__dirname, 'public/icons/carpincho-48.png'),
+).toString('base64')}`
+
 const injectManifestVersion = (): Plugin => ({
   name: 'carpincho-manifest-version',
   apply: 'build',
@@ -35,6 +43,7 @@ export default defineConfig(({ mode }) => {
     base: isExtension ? './' : '/',
     define: {
       __APP_VERSION__: JSON.stringify(appVersion),
+      __WALLET_ICON_DATA_URL__: JSON.stringify(walletIconDataUrl),
     },
     plugins: [tailwindcss(), react(), ...(isExtension ? [injectManifestVersion()] : [])],
     resolve: {

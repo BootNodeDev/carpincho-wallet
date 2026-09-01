@@ -57,6 +57,16 @@ describe('extension packaging', () => {
     assert.doesNotMatch(contentScript, /\bfrom\s*["'][^"']+["']/)
   })
 
+  it('inlines the announced wallet icon in the built content script', () => {
+    // A page cannot load a chrome-extension:// URL for an unpacked extension, so the
+    // announcement carries the PNG itself as a base64 data URI.
+    const contentScript = readText('dist-extension/contentScript.js')
+    const encoded = readFileSync('public/icons/carpincho-48.png').toString('base64')
+
+    assert.ok(contentScript.includes(`data:image/png;base64,${encoded}`))
+    assert.doesNotMatch(contentScript, /getURL\(/)
+  })
+
   it('does not depend on remote stylesheet assets', () => {
     const html = readText('index.html')
     assert.doesNotMatch(html, /cdn\.jsdelivr\.net/)

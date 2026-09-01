@@ -102,7 +102,6 @@ interface RuntimeEventRelay {
 
 type RuntimeApi = {
   id: string
-  getURL: (path: string) => string
   lastError?: { message?: string }
   sendMessage: (
     message: RuntimeProviderRequest,
@@ -124,7 +123,9 @@ const announceProvider = (): void => {
       detail: {
         id: CARPINCHO_PROVIDER_ID,
         name: CARPINCHO_PROVIDER_NAME,
-        icon: runtime.getURL('icons/carpincho-48.png'),
+        // A base64 data URI built from icons/carpincho-48.png at build time. The picker
+        // renders in a blob: document, so a chrome-extension:// URL never loads there.
+        icon: __WALLET_ICON_DATA_URL__,
         description: CARPINCHO_PROVIDER_DESCRIPTION,
         target: CARPINCHO_PROVIDER_ID,
       },
