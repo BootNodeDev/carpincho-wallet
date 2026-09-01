@@ -17,13 +17,13 @@ const appVersion = pkg.version
 // prerelease/build metadata (e.g. 1.2.0-rc.1 -> 1.2.0).
 const manifestVersion = appVersion.split(/[-+]/)[0]
 
-// The Canton dApp SDK types AnnouncedProvider.icon as a data URL or an https URL, and its
-// wallet picker renders in a blob: document that cannot load a chrome-extension:// URL (the
-// unpacked extension id changes between installs anyway). Inline the same PNG the manifest
-// ships so the announced icon travels with the announcement.
-const walletIconDataUrl = `data:image/png;base64,${readFileSync(
-  resolve(__dirname, 'public/icons/carpincho-48.png'),
-).toString('base64')}`
+// The icon the content script announces to a dApp, inlined from the same PNG the manifest
+// ships as the toolbar icon. The Canton dApp SDK types AnnouncedProvider.icon as a data URL
+// or an https URL, and its wallet picker renders in a blob: document, so an extension URL is
+// not loadable there; declaring the PNG in web_accessible_resources would expose it to every
+// page without fixing the blob: context, hence the inline copy.
+const walletIconDataUrl = (): string =>
+  `data:image/png;base64,${readFileSync(resolve(__dirname, 'public/icons/carpincho-48.png')).toString('base64')}`
 
 const injectManifestVersion = (): Plugin => ({
   name: 'carpincho-manifest-version',
@@ -43,7 +43,8 @@ export default defineConfig(({ mode }) => {
     base: isExtension ? './' : '/',
     define: {
       __APP_VERSION__: JSON.stringify(appVersion),
-      __WALLET_ICON_DATA_URL__: JSON.stringify(walletIconDataUrl),
+      // Only the content script reads it, and only the extension build bundles that entry.
+      ...(isExtension ? { __WALLET_ICON_DATA_URL__: JSON.stringify(walletIconDataUrl()) } : {}),
     },
     plugins: [tailwindcss(), react(), ...(isExtension ? [injectManifestVersion()] : [])],
     resolve: {

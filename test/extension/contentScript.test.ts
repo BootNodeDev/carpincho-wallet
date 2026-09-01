@@ -75,7 +75,9 @@ describe('contentScript provider announcement', () => {
 
   it('encodes the same PNG the manifest ships as the toolbar icon', () => {
     const detail = announcedProvider()
-    const expected = readFileSync('public/icons/carpincho-48.png').toString('base64')
+    const expected = readFileSync(
+      new URL('../../public/icons/carpincho-48.png', import.meta.url),
+    ).toString('base64')
 
     assert.equal(detail.icon, `data:image/png;base64,${expected}`)
   })

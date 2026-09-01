@@ -123,8 +123,9 @@ const announceProvider = (): void => {
       detail: {
         id: CARPINCHO_PROVIDER_ID,
         name: CARPINCHO_PROVIDER_NAME,
-        // A base64 data URI built from icons/carpincho-48.png at build time. The picker
-        // renders in a blob: document, so a chrome-extension:// URL never loads there.
+        // A base64 data URI built from icons/carpincho-48.png at build time: the SDK types
+        // this field as a data or https URL, and its picker renders in a blob: document that
+        // cannot load an extension URL.
         icon: __WALLET_ICON_DATA_URL__,
         description: CARPINCHO_PROVIDER_DESCRIPTION,
         target: CARPINCHO_PROVIDER_ID,
