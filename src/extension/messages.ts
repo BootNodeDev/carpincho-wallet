@@ -35,6 +35,10 @@ export interface SpliceWalletRequestMessage {
   target?: string
 }
 
+export type SpliceWalletCallMessage = SpliceWalletRequestMessage & {
+  request: JsonRpcRequest & { id: string | number }
+}
+
 export interface SpliceWalletAckMessage {
   type: WalletEventValue<'SPLICE_WALLET_EXT_ACK'>
   target: typeof CARPINCHO_PROVIDER_ID
@@ -97,7 +101,7 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
 export const isForCarpincho = (message: { target?: unknown }): boolean =>
   message.target === undefined || message.target === CARPINCHO_PROVIDER_ID
 
-export const isSpliceWalletRequest = (value: unknown): value is SpliceWalletRequestMessage =>
+export const isSpliceWalletRequest = (value: unknown): value is SpliceWalletCallMessage =>
   isRecord(value) &&
   value.type === WalletEvent.SPLICE_WALLET_REQUEST &&
   isRecord(value.request) &&

@@ -42,6 +42,10 @@ interface SpliceWalletRequestMessage {
   target?: string
 }
 
+type SpliceWalletCallMessage = SpliceWalletRequestMessage & {
+  request: JsonRpcRequest & { id: string | number }
+}
+
 interface SpliceWalletResponseMessage {
   type: typeof WalletEvent.SPLICE_WALLET_RESPONSE
   response: JsonRpcResponse
@@ -61,7 +65,7 @@ const isForCarpincho = (message: { target?: unknown }): boolean =>
 const isSpliceWalletReady = (value: unknown): value is SpliceWalletReadyMessage =>
   isRecord(value) && value.type === WalletEvent.SPLICE_WALLET_EXT_READY
 
-const isSpliceWalletRequest = (value: unknown): value is SpliceWalletRequestMessage =>
+const isSpliceWalletRequest = (value: unknown): value is SpliceWalletCallMessage =>
   isRecord(value) &&
   value.type === WalletEvent.SPLICE_WALLET_REQUEST &&
   isRecord(value.request) &&
