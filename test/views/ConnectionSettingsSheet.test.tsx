@@ -112,6 +112,43 @@ describe('ConnectionSettingsSheet', () => {
     assert.equal(saved.activeEndpointId, 'local')
   })
 
+  it('drops whitespace from a typed URL, so a slipped space cannot be saved', async () => {
+    // A space is never part of a URL: typing "https:/ /host" (a slash that landed as a space)
+    // must still save the endpoint the user meant, not one every request would fail against.
+    respond(true)
+    saveRuntimeConfig({ endpoints: [LOCAL], activeEndpointId: 'local' })
+    openSheet()
+
+    await userEvent.click(screen.getByTestId('endpoint-add'))
+    await userEvent.type(screen.getByTestId('endpoint-name-input'), 'Staging')
+    await userEvent.type(screen.getByTestId('endpoint-url-input'), 'https: //staging.example/rpc')
+
+    assert.equal(
+      (screen.getByTestId('endpoint-url-input') as HTMLInputElement).value,
+      'https://staging.example/rpc',
+    )
+    await userEvent.click(screen.getByTestId('endpoint-save'))
+    assert.equal(
+      loadRuntimeConfig().endpoints.find((endpoint) => endpoint.name === 'Staging')?.url,
+      'https://staging.example/rpc',
+    )
+  })
+
+  it('refuses to save a URL that is not a full http(s) one', async () => {
+    respond(true)
+    saveRuntimeConfig({ endpoints: [LOCAL], activeEndpointId: 'local' })
+    openSheet()
+
+    await userEvent.click(screen.getByTestId('endpoint-add'))
+    await userEvent.type(screen.getByTestId('endpoint-name-input'), 'Staging')
+    await userEvent.type(screen.getByTestId('endpoint-url-input'), 'staging.example/rpc')
+
+    assert.equal((screen.getByTestId('endpoint-save') as HTMLButtonElement).disabled, true)
+    assert.equal((screen.getByTestId('endpoint-test') as HTMLButtonElement).disabled, true)
+    assert.ok(screen.getByText(/full http:\/\/ or https:\/\/ URL/i))
+    assert.equal(screen.getByTestId('endpoint-url-input').getAttribute('aria-invalid'), 'true')
+  })
+
   it('edits an endpoint from the pencil button', async () => {
     respond(true)
     saveRuntimeConfig({ endpoints: [LOCAL, DEVNET], activeEndpointId: 'local' })
