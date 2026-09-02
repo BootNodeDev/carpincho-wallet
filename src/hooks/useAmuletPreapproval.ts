@@ -56,7 +56,8 @@ export const useAmuletPreapproval = (
   const pollMs = options.pollMs === undefined ? AMULET_PREAPPROVAL_POLL_MS : options.pollMs
   const query = useQuery({
     enabled: account !== undefined,
-    queryKey: ['amulet', 'preapproval', account?.id, account?.partyId],
+    // The network is part of the cache identity: the same party id can exist on another one.
+    queryKey: ['amulet', 'preapproval', account?.network, account?.id, account?.partyId],
     queryFn: () => api.getAmuletPreapprovalStatus(account?.partyId ?? ''),
     refetchInterval: pollMs === null ? false : pollMs,
   })

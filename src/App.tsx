@@ -6,6 +6,7 @@ import { SPINNER_ICON } from '@/components/ui/icons'
 import { ToastProvider } from '@/components/ui/ToastProvider'
 import { TooltipProvider } from '@/components/ui/Tooltip'
 import { createQueryClient } from '@/config/queryClient'
+import { NetworkProvider } from '@/network/NetworkContext'
 import { cn } from '@/utils/cn'
 import { useVault } from '@/vault/useVault'
 import type { VaultContextValue } from '@/vault/VaultContext'
@@ -18,8 +19,8 @@ const queryClient = createQueryClient()
 
 export type ShellView = 'loading' | 'unlock' | 'onboarding' | 'home'
 
-// First-run routing; order matters. Both onboarding cases (no vault, or unlocked vault
-// with no account) collapse to one branch; OnboardingFlow runs the vault/RPC/account steps.
+// First-run routing; order matters. Both onboarding cases (no vault, or unlocked vault with no
+// account for the network in use) collapse to one branch; OnboardingFlow runs the steps.
 export const selectShellView = (
   v: Pick<VaultContextValue, 'isLoading' | 'hasVault' | 'isLocked' | 'accounts'>,
 ): ShellView => {
@@ -68,15 +69,19 @@ const Shell = (): JSX.Element => {
   )
 }
 
+// NetworkProvider sits above the vault: the vault scopes its accounts to the network the
+// endpoint in use reports, so it has to be able to read it.
 const App = (): JSX.Element => (
   <QueryClientProvider client={queryClient}>
-    <VaultProvider>
-      <TooltipProvider>
-        <ToastProvider>
-          <Shell />
-        </ToastProvider>
-      </TooltipProvider>
-    </VaultProvider>
+    <NetworkProvider>
+      <VaultProvider>
+        <TooltipProvider>
+          <ToastProvider>
+            <Shell />
+          </ToastProvider>
+        </TooltipProvider>
+      </VaultProvider>
+    </NetworkProvider>
   </QueryClientProvider>
 )
 

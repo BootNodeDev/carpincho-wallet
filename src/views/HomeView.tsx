@@ -7,7 +7,7 @@ import { Sheet } from '@/components/ui/Sheet'
 import { toast } from '@/components/ui/toast'
 import { useExtensionDappConnection } from '@/extension/dappConnection'
 import { forgetConnectedOrigin, isExtensionRuntime } from '@/extension/runtimeClient'
-import { useWalletServiceStatus } from '@/hooks/useWalletServiceStatus'
+import { useNetwork } from '@/network/useNetwork'
 import { sortAccounts } from '@/utils/account'
 import { useVault } from '@/vault/useVault'
 import { ConnectionSettingsSheet } from '@/views/ConnectionSettingsSheet'
@@ -41,7 +41,7 @@ export const HomeView = (): JSX.Element => {
   const [busy, setBusy] = useState(false)
   const accountSnapshotRef = useRef<AccountSnapshot>({ accounts: v.accounts, primary: v.primary })
   const extensionMode = isExtensionRuntime()
-  const walletService = useWalletServiceStatus()
+  const walletService = useNetwork()
 
   // Connect proposals always use the active account; no in-flow account picker any more.
   const proposalAccount =

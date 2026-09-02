@@ -244,6 +244,42 @@ describe('VaultContext.importEncryptedVault', () => {
     assert.deepEqual(result, { imported: 1, skipped: 1, rejected: 1 })
   })
 
+  it('imports the same party id on another network as a new account', async () => {
+    // A party is hosted on one network; the same id elsewhere is a different party, so it is
+    // not the duplicate the dedupe is for.
+    const local = await generateKeypair()
+    const devnet = await generateKeypair()
+    const backup = await makeBackup(SOURCE_PW, [
+      {
+        name: 'alice',
+        partyId: 'alice::ns',
+        publicKeyBase64: local.publicKeyBase64,
+        privateKeyHex: local.privateKeyHex,
+        network: 'canton:local',
+      },
+      {
+        name: 'alice',
+        partyId: 'alice::ns',
+        publicKeyBase64: devnet.publicKeyBase64,
+        privateKeyHex: devnet.privateKeyHex,
+        network: 'canton:devnet',
+      },
+    ])
+    const { ref } = captureVault()
+    await act(async () => {
+      await ref.current?.setup(DEST_PW)
+    })
+    let result: ImportVaultResult | undefined
+    await act(async () => {
+      result = await ref.current?.importEncryptedVault(backup, SOURCE_PW)
+    })
+    assert.deepEqual(result, { imported: 2, skipped: 0, rejected: 0 })
+    assert.deepEqual(ref.current?.accounts.map((a) => a.network).sort(), [
+      'canton:devnet',
+      'canton:local',
+    ])
+  })
+
   it('persists every account from a multi-account batch in one re-encryption', async () => {
     const alice = await generateKeypair()
     const bob = await generateKeypair()

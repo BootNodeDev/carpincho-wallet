@@ -19,6 +19,7 @@ const baseVault = (overrides: Partial<VaultContextValue> = {}): VaultContextValu
     destroyVault: () => undefined,
     accounts: [],
     primary: null,
+    offNetworkCount: 0,
     transactions: [],
     setPrimary: async () => undefined,
     addAccount: async () => ({
@@ -92,6 +93,17 @@ describe('OnboardingFlow', () => {
     renderFlow({ hasVault: true, accounts: [] })
     assert.ok(screen.getByLabelText(/wallet-service rpc url/i))
     assert.equal(screen.queryByTestId('add-account-hint-input'), null)
+  })
+
+  it('skips the stepper and asks only for an account when the vault holds accounts elsewhere', async () => {
+    // Switching to a network the user has no account on is not a first run: the endpoint is
+    // already configured, so the RPC step would only stand in the way.
+    renderFlow({ hasVault: true, accounts: [], offNetworkCount: 2 })
+    assert.ok(screen.getByTestId('add-account-hint-input'))
+    assert.equal(screen.queryByLabelText(/wallet-service rpc url/i), null)
+    assert.equal(screen.queryByTestId('step-1'), null)
+    assert.ok(screen.getByText(/no account on this network/i))
+    assert.ok(screen.getByText(/2 accounts are on other networks/i))
   })
 
   it('advances to step 3 (Create Account) after the RPC connection is confirmed', async () => {

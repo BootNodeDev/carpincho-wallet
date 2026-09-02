@@ -14,10 +14,12 @@ import { clearMirroredRuntimeConfig } from '@/config/runtimeConfig'
 import { clearDirectConnectedOrigins } from '@/extension/directConnections'
 import { broadcastWalletEvent } from '@/extension/eventBroadcast'
 import { persistWalletSnapshot } from '@/extension/walletSnapshot'
+import { useNetwork } from '@/network/useNetwork'
 import { accountToCip103Wallet } from '@/provider/accounts'
 import { parseBackupContainer, wrapBackup } from '@/vault/backup'
 import { assertSecureContext, decryptVault, encryptVault } from '@/vault/crypto'
 import { derivePublicKeyBase64, signMessageBase64 } from '@/vault/keypair'
+import { accountsOnNetwork, scopedPrimaryId } from '@/vault/networkScope'
 import { ensurePasswordStrengthReady, isPasswordAcceptable } from '@/vault/passwordStrength'
 import {
   clearLockAt,
@@ -111,8 +113,11 @@ export interface VaultContextValue {
   unlock: (password: string) => Promise<void>
   lock: () => void
   destroyVault: () => Promise<void>
+  // Scoped to the network the endpoint in use reports; see @/vault/networkScope.
   accounts: AccountPublic[]
   primary: AccountPublic | null
+  // How many accounts the vault holds for other networks, so the UI can account for them.
+  offNetworkCount: number
   transactions: TransactionRecord[]
   setPrimary: (id: string) => Promise<void>
   addAccount: (args: NewAccountArgs) => Promise<AccountPublic>
@@ -134,6 +139,7 @@ export const VaultContext = createContext<VaultContextValue | undefined>(undefin
 export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
   assertSecureContext()
 
+  const { networkId } = useNetwork()
   const [tick, setTick] = useState(0)
   const [isLocked, setIsLocked] = useState(unlockedPlaintext === null)
   const [vaultExists, setVaultExists] = useState(hasVaultOnDisk())
@@ -252,14 +258,16 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     window.location.reload()
   }, [bump, broadcastConnectionState])
 
-  // dapp-api AccountsChangedEvent payload (Wallet[]); [] when locked.
+  // dapp-api AccountsChangedEvent payload (Wallet[]); [] when locked. A dApp is only ever
+  // offered the accounts the network in use hosts.
   const accountsChangedPayload = useCallback((): unknown[] => {
     if (unlockedPlaintext === null) {
       return []
     }
-    const primaryId = unlockedPlaintext.primaryAccountId
-    return unlockedPlaintext.accounts.map((a) => accountToCip103Wallet(toPublic(a, primaryId)))
-  }, [])
+    const inScope = accountsOnNetwork(unlockedPlaintext.accounts, networkId)
+    const primaryId = scopedPrimaryId(inScope, unlockedPlaintext.primaryAccountId)
+    return inScope.map((a) => accountToCip103Wallet(toPublic(a, primaryId)))
+  }, [networkId])
 
   const setPrimary = useCallback(
     async (id: string): Promise<void> => {
@@ -385,8 +393,8 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     }
   }, [])
 
-  // Restores accounts from an envelope. Per entry: the private key must derive the
-  // stored public key and the partyId must be `hint::namespace`; duplicates are skipped.
+  // Restores accounts from an envelope. Per entry: the private key must derive the stored
+  // public key and the partyId must be `hint::namespace`; party-and-network duplicates are skipped.
   // Internal: consumed only by importEncryptedVault.
   const mergeEnvelope = useCallback(
     async (envelope: VaultEnvelope): Promise<ImportVaultResult> => {
@@ -427,7 +435,11 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
           rejected += 1
           continue
         }
-        if (unlockedPlaintext.accounts.some((a) => a.partyId === partyId)) {
+        // Party ids are unique per network, not globally: the same id on another network is
+        // a different party, hosted elsewhere, so it imports as a new account.
+        if (
+          unlockedPlaintext.accounts.some((a) => a.partyId === partyId && a.network === network)
+        ) {
           skipped += 1
           continue
         }
@@ -601,13 +613,13 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
 
   // `tick` is bumped by every in-place mutation of `unlockedPlaintext`, forcing
   // this memo to recompute accounts/primary/transactions from the latest state.
+  // `networkId` re-scopes the same state to the network the endpoint in use reports.
   // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
   const value = useMemo<VaultContextValue>(() => {
-    const primaryId = unlockedPlaintext?.primaryAccountId ?? null
-    const accounts =
-      unlockedPlaintext === null
-        ? []
-        : unlockedPlaintext.accounts.map((a) => toPublic(a, primaryId))
+    const stored = unlockedPlaintext?.accounts ?? []
+    const inScope = accountsOnNetwork(stored, networkId)
+    const primaryId = scopedPrimaryId(inScope, unlockedPlaintext?.primaryAccountId ?? null)
+    const accounts = inScope.map((a) => toPublic(a, primaryId))
     const primary = accounts.find((a) => a.isPrimary) ?? null
     const transactions =
       unlockedPlaintext === null
@@ -623,6 +635,7 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
       destroyVault,
       accounts,
       primary,
+      offNetworkCount: stored.length - inScope.length,
       transactions,
       setPrimary,
       addAccount,
@@ -638,6 +651,7 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     }
   }, [
     tick,
+    networkId,
     isLocked,
     isLoading,
     vaultExists,
@@ -668,6 +682,20 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
           },
     ).catch(() => undefined)
   }, [isLocked, value.accounts, value.primary])
+
+  // A network switch changes which accounts a connected dApp may use, so it is an accounts
+  // change as far as the dapp-api is concerned. The ref keeps this to real transitions:
+  // the first render is the initial network, which the connect handshake already reported.
+  const broadcastNetworkId = useRef(networkId)
+  useEffect(() => {
+    if (broadcastNetworkId.current === networkId) {
+      return
+    }
+    broadcastNetworkId.current = networkId
+    if (!isLocked) {
+      void broadcastWalletEvent('accountsChanged', accountsChangedPayload())
+    }
+  }, [networkId, isLocked, accountsChangedPayload])
 
   return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>
 }

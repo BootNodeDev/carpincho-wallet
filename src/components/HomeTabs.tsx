@@ -44,12 +44,16 @@ export const HomeTabs = ({
     },
     [activeAccountId],
   )
+  // The party-id match catches records written under an earlier vault entry for the same
+  // party, but only on the same network: the same id elsewhere is a different party.
   const activeTransactions = useMemo(
     () =>
       account === undefined
         ? transactions
         : transactions.filter(
-            (tx) => tx.accountId === account.id || tx.partyId === account.partyId,
+            (tx) =>
+              tx.accountId === account.id ||
+              (tx.partyId === account.partyId && tx.network === account.network),
           ),
     [account, transactions],
   )

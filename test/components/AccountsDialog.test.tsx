@@ -37,6 +37,7 @@ const baseVault = (overrides: Partial<VaultContextValue> = {}): VaultContextValu
     destroyVault: () => undefined,
     accounts: [ACCT_A, ACCT_B],
     primary: ACCT_A,
+    offNetworkCount: 0,
     transactions: [],
     setPrimary: async () => undefined,
     addAccount: async () => ({
@@ -183,6 +184,22 @@ describe('AccountsDialog', () => {
     await user.click(screen.getByTestId('confirm-remove-action'))
 
     assert.equal(onOpenChange.includes(false), false)
+  })
+
+  it('accounts for the accounts held on other networks instead of dropping them silently', async () => {
+    renderDialog({ offNetworkCount: 2 })
+    await screen.findByRole('dialog')
+    assert.ok(
+      /2 accounts are on other networks/i.test(
+        screen.getByTestId('accounts-off-network').textContent ?? '',
+      ),
+    )
+  })
+
+  it('says nothing about other networks when the vault holds no such account', async () => {
+    renderDialog({ offNetworkCount: 0 })
+    await screen.findByRole('dialog')
+    assert.equal(screen.queryByTestId('accounts-off-network'), null)
   })
 
   it('shows only a create button on the add screen, no cancel button', async () => {

@@ -37,7 +37,15 @@ export const useTokenHoldingDetails = (
     cachedHoldings === undefined
   const query = useQuery({
     enabled,
-    queryKey: ['cip56', 'holdingDetails', account?.id, account?.partyId, summary?.key],
+    // The network is part of the cache identity: the same party id can exist on another one.
+    queryKey: [
+      'cip56',
+      'holdingDetails',
+      account?.network,
+      account?.id,
+      account?.partyId,
+      summary?.key,
+    ],
     queryFn: async () => {
       const holdings = await api.listTokenHoldings(account?.partyId ?? '')
       return filterTokenHoldingsByInstrument(holdings, summary?.instrumentId)

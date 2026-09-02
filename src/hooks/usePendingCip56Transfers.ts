@@ -50,7 +50,8 @@ export const usePendingCip56Transfers = (
   const pollMs = options.pollMs === undefined ? CIP56_TRANSFER_POLL_MS : options.pollMs
   const query = useQuery({
     enabled: account !== undefined,
-    queryKey: ['cip56', 'incomingTransfers', account?.id, account?.partyId],
+    // The network is part of the cache identity: the same party id can exist on another one.
+    queryKey: ['cip56', 'incomingTransfers', account?.network, account?.id, account?.partyId],
     queryFn: () => api.listPendingIncomingTransfers(account?.partyId ?? ''),
     refetchInterval: pollMs === null ? false : pollMs,
   })
