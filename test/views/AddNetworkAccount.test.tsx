@@ -3,6 +3,7 @@ import { afterEach, describe, it } from 'node:test'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TooltipProvider } from '@/components/ui/Tooltip'
+import { getToastEntries, toast } from '@/components/ui/toast'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import { VaultContext, type VaultContextValue } from '@/vault/VaultContext'
 import { AddNetworkAccount } from '@/views/AddNetworkAccount'
@@ -52,18 +53,17 @@ const installHealthyWalletService = (): void => {
 describe('AddNetworkAccount', () => {
   afterEach(() => {
     cleanup()
+    toast.clear()
     localStorage.clear()
     globalThis.fetch = originalFetch
   })
 
-  it('asks for an account on this network', () => {
+  it('asks for an account on this network, as a toast rather than in the form', () => {
     renderView({ offNetworkCount: 2 })
     assert.ok(screen.getByTestId('add-account-hint-input'))
-    assert.ok(
-      /no account on this network/i.test(
-        screen.getByTestId('no-account-for-network').textContent ?? '',
-      ),
-    )
+    const entries = getToastEntries()
+    assert.equal(entries[0]?.variant, 'info')
+    assert.equal(entries[0]?.message, 'No account on this network, please create one to proceed.')
   })
 
   it('offers the endpoint list, the way back to a network with an account', async () => {

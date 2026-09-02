@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { Alert } from '@/components/ui/Alert'
+import { useEffect, useState } from 'react'
 import { SecondaryButton } from '@/components/ui/Button'
+import { toast } from '@/components/ui/toast'
 import { WelcomeHero } from '@/components/WelcomeHero'
+import { useNetwork } from '@/network/useNetwork'
 import { ConnectionSettingsSheet } from '@/views/ConnectionSettingsSheet'
 import { CreateFirstAccount } from '@/views/onboarding/CreateFirstAccount'
 
@@ -9,7 +10,15 @@ import { CreateFirstAccount } from '@/views/onboarding/CreateFirstAccount'
 // an endpoint switch rather than a first run. It replaces Home, which owns the endpoint list,
 // so it has to offer the way back to the other network itself.
 export const AddNetworkAccount = (): JSX.Element => {
+  const { networkId } = useNetwork()
   const [connectionOpen, setConnectionOpen] = useState(false)
+
+  // Why the wallet landed here is feedback, not part of the form. Re-announced per network so
+  // switching from this screen to another empty one says so again.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
+  useEffect(() => {
+    toast.info('No account on this network, please create one to proceed.')
+  }, [networkId])
 
   return (
     <div>
@@ -18,12 +27,6 @@ export const AddNetworkAccount = (): JSX.Element => {
         layout="compact"
       />
       <div className="flex flex-col gap-4">
-        <Alert
-          variant="info"
-          testId="no-account-for-network"
-        >
-          No account on this network, please create one to proceed.
-        </Alert>
         <CreateFirstAccount />
         <SecondaryButton
           className="w-full"
