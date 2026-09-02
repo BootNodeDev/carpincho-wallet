@@ -22,7 +22,7 @@ export const AddNetworkAccount = (): JSX.Element => {
           variant="info"
           testId="no-account-for-network"
         >
-          No parties on this network, please create one to proceed.
+          No account on this network, please create one to proceed.
         </Alert>
         <CreateFirstAccount />
         <SecondaryButton
