@@ -41,6 +41,8 @@ const Shell = (): JSX.Element => {
   const [menuOpen, setMenuOpen] = useState(false)
   const view = selectShellView(v)
   const showHeader = view === 'home'
+  // The two views that pin the connection footer to the bottom of the popup.
+  const fixedHeight = view === 'home' || view === 'add-network-account'
   useEffect(() => {
     if (!showHeader) setMenuOpen(false)
   }, [showHeader])
@@ -56,8 +58,9 @@ const Shell = (): JSX.Element => {
     <div
       className={cn(
         'w-popup mx-auto px-3 pt-3',
-        // Home is a fixed-height shell (only the tab body scrolls); other views flow naturally.
-        view === 'home' ? 'flex h-screen flex-col' : 'pb-8',
+        // A fixed-height shell scrolls only its body, keeping the footer on screen; the other
+        // views flow naturally.
+        fixedHeight ? 'flex h-screen flex-col' : 'pb-8',
       )}
     >
       {showHeader && <Header onOpenMenu={() => setMenuOpen(true)} />}

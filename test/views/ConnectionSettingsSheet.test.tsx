@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { toast } from '@/components/ui/toast'
+import { getToastEntries, toast } from '@/components/ui/toast'
 import { activeRpcUrl, loadRuntimeConfig, saveRuntimeConfig } from '@/config/runtimeConfig'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import { ConnectionSettingsSheet } from '@/views/ConnectionSettingsSheet'
@@ -25,15 +25,17 @@ const respond = (connected: boolean): void => {
     )) as typeof globalThis.fetch
 }
 
-const openSheet = (): void => {
+const openSheet = (): { openChanges: boolean[] } => {
+  const openChanges: boolean[] = []
   render(
     <TestQueryClientProvider>
       <ConnectionSettingsSheet
         open
-        onOpenChange={() => undefined}
+        onOpenChange={(next) => openChanges.push(next)}
       />
     </TestQueryClientProvider>,
   )
+  return { openChanges }
 }
 
 const rows = (): HTMLElement[] => screen.getAllByTestId('endpoint-item')
@@ -68,14 +70,27 @@ describe('ConnectionSettingsSheet', () => {
     assert.ok(screen.getByText('http://devnet.example/rpc'))
   })
 
-  it('makes the tapped endpoint the one in use', async () => {
+  it('makes the tapped endpoint the one in use, and closes', async () => {
     respond(true)
     saveRuntimeConfig({ endpoints: [LOCAL, DEVNET], activeEndpointId: 'local' })
-    openSheet()
+    const { openChanges } = openSheet()
 
     await userEvent.click(rowButton('endpoint-item', 'Devnet'))
 
     assert.equal(activeRpcUrl(loadRuntimeConfig()), 'http://devnet.example/rpc')
+    assert.ok(openChanges.includes(false))
+  })
+
+  it('closes without a switch when the tapped endpoint is already the one in use', async () => {
+    respond(true)
+    saveRuntimeConfig({ endpoints: [LOCAL, DEVNET], activeEndpointId: 'devnet' })
+    const { openChanges } = openSheet()
+
+    await userEvent.click(rowButton('endpoint-item', 'Devnet'))
+
+    assert.equal(activeRpcUrl(loadRuntimeConfig()), 'http://devnet.example/rpc')
+    assert.equal(getToastEntries().length, 0)
+    assert.ok(openChanges.includes(false))
   })
 
   it('adds an endpoint from the add form', async () => {
