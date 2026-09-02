@@ -20,6 +20,7 @@ const baseVault = (overrides: Partial<VaultContextValue> = {}): VaultContextValu
     destroyVault: () => undefined,
     accounts: [],
     primary: null,
+    offNetworkCount: 0,
     transactions: [],
     setPrimary: async () => undefined,
     addAccount: async () => ({
@@ -114,12 +115,12 @@ describe('CreateAccountForm', () => {
     assert.ok(screen.getByRole('button', { name: 'Create your account' }))
   })
 
-  it('always shows the username requirements as helper text', () => {
+  it('always shows the account-name requirements as helper text', () => {
     renderForm()
     assert.ok(screen.getByText(/3-64 lowercase/i))
   })
 
-  it('keeps the submit button disabled until the username is valid', async () => {
+  it('keeps the submit button disabled until the account name is valid', async () => {
     const user = userEvent.setup()
     renderForm()
     const submit = screen.getByTestId('add-account-submit') as HTMLButtonElement
@@ -130,12 +131,13 @@ describe('CreateAccountForm', () => {
     assert.equal(submit.disabled, false)
   })
 
-  it('stores the network discovered from wallet-service status after creating the party', async () => {
-    // Scenario: account creation talks to wallet-service for party onboarding, then uses
-    // wallet-service status as the canonical network source for the stored account.
+  it('hands the created party to the vault without reading the network itself', async () => {
+    // Scenario: account creation talks to wallet-service for party onboarding only. The
+    // network is stamped by the vault from the endpoint in use, so the form must not probe
+    // status for a second reading of it -- the fetch stub below throws if it does.
     const user = userEvent.setup()
-    const added: Array<{ network: string; partyId: string; name: string }> = []
-    globalThis.fetch = (async (input, init) => {
+    const added: Array<Record<string, unknown>> = []
+    globalThis.fetch = (async (input) => {
       const url = String(input)
       if (url.endsWith('/admin/party/prepare')) {
         // Setup: the prepare endpoint returns a valid base64 message for Carpincho to sign.
@@ -152,18 +154,6 @@ describe('CreateAccountForm', () => {
         // Setup: the complete endpoint returns the final external party id.
         return new Response(JSON.stringify({ partyId: 'alice::fingerprint' }), { status: 200 })
       }
-      if (url.endsWith('/rpc') && String(init?.body ?? '').includes('"method":"status"')) {
-        // Setup: status reports the network that must be persisted with the new account.
-        return new Response(
-          JSON.stringify({
-            result: {
-              connection: { isNetworkConnected: true },
-              network: { networkId: 'canton:from-status' },
-            },
-          }),
-          { status: 200 },
-        )
-      }
       throw new Error(`unexpected request: ${url}`)
     }) as typeof globalThis.fetch
     renderForm(
@@ -171,13 +161,13 @@ describe('CreateAccountForm', () => {
       {
         addAccount: async (args) => {
           // Assertion fixture: capture the account args that would be persisted in the vault.
-          added.push({ network: args.network, partyId: args.partyId, name: args.name })
+          added.push({ ...args })
           return {
             id: 'acct-1',
             name: args.name,
             partyId: args.partyId,
             publicKeyBase64: args.publicKeyBase64,
-            network: args.network,
+            network: 'canton:local',
             isPrimary: true,
             createdAt: 1,
           }
@@ -189,13 +179,11 @@ describe('CreateAccountForm', () => {
     await user.type(screen.getByTestId('add-account-hint-input'), 'alice')
     await user.click(screen.getByTestId('add-account-submit'))
 
-    // Expected result: the stored account uses wallet-service's network id.
+    // Expected result: the party the ledger returned, and no network of the form's own.
     await waitFor(() => assert.equal(added.length, 1))
-    assert.deepEqual(added[0], {
-      network: 'canton:from-status',
-      partyId: 'alice::fingerprint',
-      name: 'alice',
-    })
+    assert.equal(added[0]?.partyId, 'alice::fingerprint')
+    assert.equal(added[0]?.name, 'alice')
+    assert.equal('network' in (added[0] ?? {}), false)
   })
 })
 

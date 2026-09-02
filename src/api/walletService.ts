@@ -104,10 +104,17 @@ export const walletServiceStatus = async (
 export const isCantonConnected = (status: WalletServiceStatusResponse): boolean =>
   status.connection?.isNetworkConnected === true
 
+// The one reading of the reported network id, so the value that scopes accounts is always the
+// value stored on them: trimmed, and undefined when wallet-service named no network at all.
+export const networkIdFromStatus = (status: WalletServiceStatusResponse): string | undefined => {
+  const networkId = status.network?.networkId?.trim()
+  return networkId === '' ? undefined : networkId
+}
+
 // Extracts the active network id and fails when wallet-service cannot provide one.
 export const networkIdFromWalletServiceStatus = (status: WalletServiceStatusResponse): string => {
-  const networkId = status.network?.networkId?.trim()
-  if (networkId === undefined || networkId === '') {
+  const networkId = networkIdFromStatus(status)
+  if (networkId === undefined) {
     throw new Error('wallet-service status did not include networkId')
   }
   return networkId

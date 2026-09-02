@@ -7,6 +7,7 @@ import { TabContent, Tabs, TabsList, TabTrigger } from '@/components/ui/Tabs'
 import type { AmuletPreapprovalApi } from '@/hooks/useAmuletPreapproval'
 import type { Cip56TransferApi } from '@/hooks/usePendingCip56Transfers'
 import type { Cip56HoldingsApi } from '@/hooks/useTokenHoldings'
+import { recordBelongsToAccount } from '@/vault/networkScope'
 import type { AccountPublic, TransactionRecord } from '@/vault/types'
 
 interface HomeTabsProps {
@@ -48,9 +49,7 @@ export const HomeTabs = ({
     () =>
       account === undefined
         ? transactions
-        : transactions.filter(
-            (tx) => tx.accountId === account.id || tx.partyId === account.partyId,
-          ),
+        : transactions.filter((tx) => recordBelongsToAccount(tx, account)),
     [account, transactions],
   )
 

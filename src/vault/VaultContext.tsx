@@ -14,10 +14,12 @@ import { clearMirroredRuntimeConfig } from '@/config/runtimeConfig'
 import { clearDirectConnectedOrigins } from '@/extension/directConnections'
 import { broadcastWalletEvent } from '@/extension/eventBroadcast'
 import { persistWalletSnapshot } from '@/extension/walletSnapshot'
+import { useNetwork } from '@/network/useNetwork'
 import { accountToCip103Wallet } from '@/provider/accounts'
 import { parseBackupContainer, wrapBackup } from '@/vault/backup'
 import { assertSecureContext, decryptVault, encryptVault } from '@/vault/crypto'
 import { derivePublicKeyBase64, signMessageBase64 } from '@/vault/keypair'
+import { accountsOnNetwork, resolvePrimaryId } from '@/vault/networkScope'
 import { ensurePasswordStrengthReady, isPasswordAcceptable } from '@/vault/passwordStrength'
 import {
   clearLockAt,
@@ -57,13 +59,17 @@ const AUTO_LOCK_MS: Record<AutoLockOption, number | null> = {
 }
 const MAX_TRANSACTION_HISTORY = 50
 
+// No `network`: the vault stamps the one the endpoint in use reports, so a new account cannot
+// be recorded under a network the wallet is not scoped to and then be invisible.
 interface NewAccountArgs {
   name: string
   partyId: string
-  network: string
   privateKeyHex: string
   publicKeyBase64: string
 }
+
+// The in-memory insert also serves import, which carries a network per entry.
+type InsertAccountArgs = NewAccountArgs & { network: string }
 
 let unlockedPlaintext: VaultPlaintext | null = null
 let cachedPassword: string | null = null
@@ -111,8 +117,12 @@ export interface VaultContextValue {
   unlock: (password: string) => Promise<void>
   lock: () => void
   destroyVault: () => Promise<void>
+  // Scoped to the network the endpoint in use reports; see @/vault/networkScope.
   accounts: AccountPublic[]
   primary: AccountPublic | null
+  // How many accounts the vault holds for other networks. Routing reads it to tell an endpoint
+  // switch (accounts, just not here) from a first run (no accounts at all).
+  offNetworkCount: number
   transactions: TransactionRecord[]
   setPrimary: (id: string) => Promise<void>
   addAccount: (args: NewAccountArgs) => Promise<AccountPublic>
@@ -134,6 +144,7 @@ export const VaultContext = createContext<VaultContextValue | undefined>(undefin
 export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
   assertSecureContext()
 
+  const { networkId } = useNetwork()
   const [tick, setTick] = useState(0)
   const [isLocked, setIsLocked] = useState(unlockedPlaintext === null)
   const [vaultExists, setVaultExists] = useState(hasVaultOnDisk())
@@ -252,14 +263,28 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     window.location.reload()
   }, [bump, broadcastConnectionState])
 
+  // The one scoping of the stored accounts: the UI projection and the dapp-api payload both
+  // read it, so what a dApp is offered can never drift from what the wallet shows. Empty while
+  // locked, since the plaintext is gone.
+  const scopeAccounts = useCallback((): {
+    stored: AccountSecret[]
+    inScope: AccountSecret[]
+    primaryId: string | null
+  } => {
+    const stored = unlockedPlaintext?.accounts ?? []
+    const inScope = accountsOnNetwork(stored, networkId)
+    return {
+      stored,
+      inScope,
+      primaryId: resolvePrimaryId(inScope, unlockedPlaintext?.primaryAccountId ?? null),
+    }
+  }, [networkId])
+
   // dapp-api AccountsChangedEvent payload (Wallet[]); [] when locked.
   const accountsChangedPayload = useCallback((): unknown[] => {
-    if (unlockedPlaintext === null) {
-      return []
-    }
-    const primaryId = unlockedPlaintext.primaryAccountId
-    return unlockedPlaintext.accounts.map((a) => accountToCip103Wallet(toPublic(a, primaryId)))
-  }, [])
+    const { inScope, primaryId } = scopeAccounts()
+    return inScope.map((a) => accountToCip103Wallet(toPublic(a, primaryId)))
+  }, [scopeAccounts])
 
   const setPrimary = useCallback(
     async (id: string): Promise<void> => {
@@ -280,7 +305,7 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
   // In-memory insert shared by addAccount and the import merge: pushes the secret
   // and seeds primary if unset. Caller owns persist()/bump()/broadcast so a batch
   // import re-encrypts once instead of once per account. Assumes an unlocked vault.
-  const insertAccount = useCallback((args: NewAccountArgs): AccountSecret => {
+  const insertAccount = useCallback((args: InsertAccountArgs): AccountSecret => {
     if (unlockedPlaintext === null) {
       throw new Error('vault locked')
     }
@@ -301,16 +326,21 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
   }, [])
 
   // Caller supplies the keypair (already used to create the Canton party);
-  // generating one here would desync the vault entry from the account.
+  // generating one here would desync the vault entry from the account. The network comes from
+  // the endpoint in use, which is the network the party was just created on; without one there
+  // is nothing to record the account against.
   const addAccount = useCallback(
     async (args: NewAccountArgs): Promise<AccountPublic> => {
-      const secret = insertAccount(args)
+      if (networkId === undefined) {
+        throw new Error('wallet-service has not reported a network')
+      }
+      const secret = insertAccount({ ...args, network: networkId })
       await persist()
       bump()
       void broadcastWalletEvent('accountsChanged', accountsChangedPayload())
-      return toPublic(secret, unlockedPlaintext?.primaryAccountId ?? null)
+      return toPublic(secret, scopeAccounts().primaryId)
     },
-    [insertAccount, persist, bump, accountsChangedPayload],
+    [networkId, insertAccount, persist, bump, accountsChangedPayload, scopeAccounts],
   )
 
   const recordTransaction = useCallback(
@@ -343,9 +373,10 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
         throw new Error('cannot remove the last account')
       }
       unlockedPlaintext.accounts = unlockedPlaintext.accounts.filter((a) => a.id !== id)
-      if (unlockedPlaintext.primaryAccountId === id) {
-        unlockedPlaintext.primaryAccountId = unlockedPlaintext.accounts[0]?.id ?? null
-      }
+      unlockedPlaintext.primaryAccountId = resolvePrimaryId(
+        unlockedPlaintext.accounts,
+        unlockedPlaintext.primaryAccountId,
+      )
       await persist()
       bump()
       void broadcastWalletEvent('accountsChanged', accountsChangedPayload())
@@ -385,8 +416,8 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     }
   }, [])
 
-  // Restores accounts from an envelope. Per entry: the private key must derive the
-  // stored public key and the partyId must be `hint::namespace`; duplicates are skipped.
+  // Restores accounts from an envelope. Per entry: the private key must derive the stored
+  // public key and the partyId must be `hint::namespace`; party-and-network duplicates are skipped.
   // Internal: consumed only by importEncryptedVault.
   const mergeEnvelope = useCallback(
     async (envelope: VaultEnvelope): Promise<ImportVaultResult> => {
@@ -427,7 +458,11 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
           rejected += 1
           continue
         }
-        if (unlockedPlaintext.accounts.some((a) => a.partyId === partyId)) {
+        // Party ids are unique per network, not globally: the same id on another network is
+        // a different party, hosted elsewhere, so it imports as a new account.
+        if (
+          unlockedPlaintext.accounts.some((a) => a.partyId === partyId && a.network === network)
+        ) {
           skipped += 1
           continue
         }
@@ -599,20 +634,20 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     }
   }, [autoLockOption])
 
-  // `tick` is bumped by every in-place mutation of `unlockedPlaintext`, forcing
-  // this memo to recompute accounts/primary/transactions from the latest state.
+  // `tick` is bumped by every in-place mutation of `unlockedPlaintext`, forcing these memos to
+  // recompute from the latest state. History spans every network, so only the account
+  // projection depends on `networkId` (through `scopeAccounts`).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
+  const transactions = useMemo(
+    () => [...transactionHistory()].sort((a, b) => b.createdAt - a.createdAt),
+    [tick],
+  )
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
   const value = useMemo<VaultContextValue>(() => {
-    const primaryId = unlockedPlaintext?.primaryAccountId ?? null
-    const accounts =
-      unlockedPlaintext === null
-        ? []
-        : unlockedPlaintext.accounts.map((a) => toPublic(a, primaryId))
+    const { stored, inScope, primaryId } = scopeAccounts()
+    const accounts = inScope.map((a) => toPublic(a, primaryId))
     const primary = accounts.find((a) => a.isPrimary) ?? null
-    const transactions =
-      unlockedPlaintext === null
-        ? []
-        : [...transactionHistory()].sort((a, b) => b.createdAt - a.createdAt)
     return {
       isLocked,
       isLoading,
@@ -623,6 +658,7 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
       destroyVault,
       accounts,
       primary,
+      offNetworkCount: stored.length - inScope.length,
       transactions,
       setPrimary,
       addAccount,
@@ -638,6 +674,8 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     }
   }, [
     tick,
+    scopeAccounts,
+    transactions,
     isLocked,
     isLoading,
     vaultExists,
@@ -668,6 +706,24 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
           },
     ).catch(() => undefined)
   }, [isLocked, value.accounts, value.primary])
+
+  // Moving between two named networks changes which accounts a connected dApp may use, so it
+  // is an accounts change as far as the dapp-api is concerned. Three states are deliberately
+  // not: an unknown network (a switch clears the reported one until the new endpoint answers,
+  // and a failed poll names none — the accounts did not change, they are only unscoped for a
+  // moment), the first network the popup learns (nothing has been reported to anyone yet), and
+  // a switch made while locked, which the ref holds on to so unlock still announces it.
+  const broadcastNetworkId = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (isLocked || networkId === undefined || broadcastNetworkId.current === networkId) {
+      return
+    }
+    const previous = broadcastNetworkId.current
+    broadcastNetworkId.current = networkId
+    if (previous !== undefined) {
+      void broadcastWalletEvent('accountsChanged', accountsChangedPayload())
+    }
+  }, [networkId, isLocked, accountsChangedPayload])
 
   return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>
 }

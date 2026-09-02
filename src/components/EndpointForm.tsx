@@ -2,7 +2,11 @@ import { useId, useState } from 'react'
 import { GhostButton, PrimaryButton } from '@/components/ui/Button'
 import { ALERT_CIRCLE_ICON, ALERT_TRIANGLE_ICON, SPINNER_ICON } from '@/components/ui/icons'
 import { TextInput } from '@/components/ui/TextInput'
-import type { WalletServiceEndpoint } from '@/config/runtimeConfig'
+import {
+  isEndpointUrl,
+  normalizeEndpointUrl,
+  type WalletServiceEndpoint,
+} from '@/config/runtimeConfig'
 import { useWalletServiceTest, type WalletServiceTestState } from '@/hooks/useWalletServiceTest'
 import { cn } from '@/utils/cn'
 import { displayNetworkId } from '@/utils/network'
@@ -59,6 +63,8 @@ export const EndpointForm = ({
   const result = testedUrl === trimmedUrl && state !== 'idle' ? state : undefined
   const network = displayNetworkId(networkId)
   const shown = result === undefined ? undefined : RESULT[result](reason)
+  // Said only once there is something to judge, so it does not greet an empty field.
+  const malformed = trimmedUrl !== '' && !isEndpointUrl(trimmedUrl)
 
   return (
     <form
@@ -87,7 +93,7 @@ export const EndpointForm = ({
             onClick={() => {
               void test(trimmedUrl)
             }}
-            disabled={trimmedUrl === '' || state === 'testing'}
+            disabled={!isEndpointUrl(trimmedUrl) || state === 'testing'}
             className="text-[0.82rem]"
           >
             Test
@@ -99,12 +105,22 @@ export const EndpointForm = ({
           type="url"
           className="font-mono"
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => setUrl(normalizeEndpointUrl(e.target.value))}
           placeholder="http://localhost:3010/rpc"
-          error={result === 'unreachable'}
-          aria-errormessage={result === 'unreachable' ? resultId : undefined}
+          error={malformed || result === 'unreachable'}
+          aria-errormessage={malformed || result === 'unreachable' ? resultId : undefined}
         />
-        {shown !== undefined && (
+        {malformed && (
+          <p
+            id={resultId}
+            role="status"
+            className="mt-2 flex items-center gap-2 px-1 text-[0.82rem] font-semibold text-danger"
+          >
+            <span className="shrink-0 [&>svg]:size-4">{ALERT_CIRCLE_ICON}</span>
+            <span className="min-w-0 font-normal">Enter a full http:// or https:// URL</span>
+          </p>
+        )}
+        {!malformed && shown !== undefined && (
           <p
             id={resultId}
             role="status"
@@ -128,7 +144,7 @@ export const EndpointForm = ({
         type="submit"
         className="mt-1 w-full"
         data-testid="endpoint-save"
-        disabled={trimmedName === '' || trimmedUrl === ''}
+        disabled={trimmedName === '' || !isEndpointUrl(trimmedUrl)}
       >
         {submitLabel}
       </PrimaryButton>

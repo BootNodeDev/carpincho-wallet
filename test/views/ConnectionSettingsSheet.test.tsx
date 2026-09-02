@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { toast } from '@/components/ui/toast'
+import { getToastEntries, toast } from '@/components/ui/toast'
 import { activeRpcUrl, loadRuntimeConfig, saveRuntimeConfig } from '@/config/runtimeConfig'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import { ConnectionSettingsSheet } from '@/views/ConnectionSettingsSheet'
@@ -25,15 +25,17 @@ const respond = (connected: boolean): void => {
     )) as typeof globalThis.fetch
 }
 
-const openSheet = (): void => {
+const openSheet = (): { openChanges: boolean[] } => {
+  const openChanges: boolean[] = []
   render(
     <TestQueryClientProvider>
       <ConnectionSettingsSheet
         open
-        onOpenChange={() => undefined}
+        onOpenChange={(next) => openChanges.push(next)}
       />
     </TestQueryClientProvider>,
   )
+  return { openChanges }
 }
 
 const rows = (): HTMLElement[] => screen.getAllByTestId('endpoint-item')
@@ -68,14 +70,27 @@ describe('ConnectionSettingsSheet', () => {
     assert.ok(screen.getByText('http://devnet.example/rpc'))
   })
 
-  it('makes the tapped endpoint the one in use', async () => {
+  it('makes the tapped endpoint the one in use, and closes', async () => {
     respond(true)
     saveRuntimeConfig({ endpoints: [LOCAL, DEVNET], activeEndpointId: 'local' })
-    openSheet()
+    const { openChanges } = openSheet()
 
     await userEvent.click(rowButton('endpoint-item', 'Devnet'))
 
     assert.equal(activeRpcUrl(loadRuntimeConfig()), 'http://devnet.example/rpc')
+    assert.ok(openChanges.includes(false))
+  })
+
+  it('closes without a switch when the tapped endpoint is already the one in use', async () => {
+    respond(true)
+    saveRuntimeConfig({ endpoints: [LOCAL, DEVNET], activeEndpointId: 'devnet' })
+    const { openChanges } = openSheet()
+
+    await userEvent.click(rowButton('endpoint-item', 'Devnet'))
+
+    assert.equal(activeRpcUrl(loadRuntimeConfig()), 'http://devnet.example/rpc')
+    assert.equal(getToastEntries().length, 0)
+    assert.ok(openChanges.includes(false))
   })
 
   it('adds an endpoint from the add form', async () => {
@@ -95,6 +110,43 @@ describe('ConnectionSettingsSheet', () => {
     )
     // Adding does not switch: the endpoint in use stays put.
     assert.equal(saved.activeEndpointId, 'local')
+  })
+
+  it('drops whitespace from a typed URL, so a slipped space cannot be saved', async () => {
+    // A space is never part of a URL: typing "https:/ /host" (a slash that landed as a space)
+    // must still save the endpoint the user meant, not one every request would fail against.
+    respond(true)
+    saveRuntimeConfig({ endpoints: [LOCAL], activeEndpointId: 'local' })
+    openSheet()
+
+    await userEvent.click(screen.getByTestId('endpoint-add'))
+    await userEvent.type(screen.getByTestId('endpoint-name-input'), 'Staging')
+    await userEvent.type(screen.getByTestId('endpoint-url-input'), 'https: //staging.example/rpc')
+
+    assert.equal(
+      (screen.getByTestId('endpoint-url-input') as HTMLInputElement).value,
+      'https://staging.example/rpc',
+    )
+    await userEvent.click(screen.getByTestId('endpoint-save'))
+    assert.equal(
+      loadRuntimeConfig().endpoints.find((endpoint) => endpoint.name === 'Staging')?.url,
+      'https://staging.example/rpc',
+    )
+  })
+
+  it('refuses to save a URL that is not a full http(s) one', async () => {
+    respond(true)
+    saveRuntimeConfig({ endpoints: [LOCAL], activeEndpointId: 'local' })
+    openSheet()
+
+    await userEvent.click(screen.getByTestId('endpoint-add'))
+    await userEvent.type(screen.getByTestId('endpoint-name-input'), 'Staging')
+    await userEvent.type(screen.getByTestId('endpoint-url-input'), 'staging.example/rpc')
+
+    assert.equal((screen.getByTestId('endpoint-save') as HTMLButtonElement).disabled, true)
+    assert.equal((screen.getByTestId('endpoint-test') as HTMLButtonElement).disabled, true)
+    assert.ok(screen.getByText(/full http:\/\/ or https:\/\/ URL/i))
+    assert.equal(screen.getByTestId('endpoint-url-input').getAttribute('aria-invalid'), 'true')
   })
 
   it('edits an endpoint from the pencil button', async () => {

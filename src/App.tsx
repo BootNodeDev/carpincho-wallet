@@ -6,28 +6,34 @@ import { SPINNER_ICON } from '@/components/ui/icons'
 import { ToastProvider } from '@/components/ui/ToastProvider'
 import { TooltipProvider } from '@/components/ui/Tooltip'
 import { createQueryClient } from '@/config/queryClient'
+import { NetworkProvider } from '@/network/NetworkContext'
 import { cn } from '@/utils/cn'
 import { useVault } from '@/vault/useVault'
 import type { VaultContextValue } from '@/vault/VaultContext'
 import { VaultProvider } from '@/vault/VaultContext'
+import { AddNetworkAccount } from '@/views/AddNetworkAccount'
 import { HomeView } from '@/views/HomeView'
 import { OnboardingFlow } from '@/views/onboarding/OnboardingFlow'
 import { UnlockView } from '@/views/UnlockView'
 
 const queryClient = createQueryClient()
 
-export type ShellView = 'loading' | 'unlock' | 'onboarding' | 'home'
+export type ShellView = 'loading' | 'unlock' | 'onboarding' | 'add-network-account' | 'home'
 
-// First-run routing; order matters. Both onboarding cases (no vault, or unlocked vault
-// with no account) collapse to one branch; OnboardingFlow runs the vault/RPC/account steps.
+// First-run routing; order matters. A vault with no account for the network in use is
+// 'add-network-account' when it holds accounts for other networks (an endpoint switch, so the
+// vault and RPC steps are already done) and 'onboarding' when it holds none at all.
 export const selectShellView = (
-  v: Pick<VaultContextValue, 'isLoading' | 'hasVault' | 'isLocked' | 'accounts'>,
+  v: Pick<
+    VaultContextValue,
+    'isLoading' | 'hasVault' | 'isLocked' | 'accounts' | 'offNetworkCount'
+  >,
 ): ShellView => {
   if (v.isLoading) return 'loading'
   if (!v.hasVault) return 'onboarding'
   if (v.isLocked) return 'unlock'
-  if (v.accounts.length === 0) return 'onboarding'
-  return 'home'
+  if (v.accounts.length > 0) return 'home'
+  return v.offNetworkCount > 0 ? 'add-network-account' : 'onboarding'
 }
 
 const Shell = (): JSX.Element => {
@@ -35,6 +41,8 @@ const Shell = (): JSX.Element => {
   const [menuOpen, setMenuOpen] = useState(false)
   const view = selectShellView(v)
   const showHeader = view === 'home'
+  // The two views that pin the connection footer to the bottom of the popup.
+  const fixedHeight = view === 'home' || view === 'add-network-account'
   useEffect(() => {
     if (!showHeader) setMenuOpen(false)
   }, [showHeader])
@@ -50,13 +58,15 @@ const Shell = (): JSX.Element => {
     <div
       className={cn(
         'w-popup mx-auto px-3 pt-3',
-        // Home is a fixed-height shell (only the tab body scrolls); other views flow naturally.
-        view === 'home' ? 'flex h-screen flex-col' : 'pb-8',
+        // A fixed-height shell scrolls only its body, keeping the footer on screen; the other
+        // views flow naturally.
+        fixedHeight ? 'flex h-screen flex-col' : 'pb-8',
       )}
     >
       {showHeader && <Header onOpenMenu={() => setMenuOpen(true)} />}
       {view === 'unlock' && <UnlockView />}
       {view === 'onboarding' && <OnboardingFlow />}
+      {view === 'add-network-account' && <AddNetworkAccount />}
       {view === 'home' && <HomeView />}
       {showHeader && (
         <MenuSheet
@@ -68,15 +78,19 @@ const Shell = (): JSX.Element => {
   )
 }
 
+// NetworkProvider sits above the vault: the vault scopes its accounts to the network the
+// endpoint in use reports, so it has to be able to read it.
 const App = (): JSX.Element => (
   <QueryClientProvider client={queryClient}>
-    <VaultProvider>
-      <TooltipProvider>
-        <ToastProvider>
-          <Shell />
-        </ToastProvider>
-      </TooltipProvider>
-    </VaultProvider>
+    <NetworkProvider>
+      <VaultProvider>
+        <TooltipProvider>
+          <ToastProvider>
+            <Shell />
+          </ToastProvider>
+        </TooltipProvider>
+      </VaultProvider>
+    </NetworkProvider>
   </QueryClientProvider>
 )
 

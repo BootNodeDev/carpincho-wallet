@@ -19,6 +19,7 @@ const baseVault = (overrides: Partial<VaultContextValue> = {}): VaultContextValu
     destroyVault: () => undefined,
     accounts: [],
     primary: null,
+    offNetworkCount: 0,
     transactions: [],
     setPrimary: async () => undefined,
     addAccount: async () => ({

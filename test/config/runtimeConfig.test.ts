@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
 import {
   activeRpcUrl,
+  isEndpointUrl,
   loadRuntimeConfig,
   loadRuntimeConfigAsync,
   saveRuntimeConfig,
@@ -79,6 +80,26 @@ describe('runtime config storage', () => {
     assert.equal(activeRpcUrl(loaded), 'http://existing.example/rpc')
     assert.equal(localStorage.getItem('carpincho.runtime-config.v2'), null)
     assert.equal(loadRuntimeConfig().activeEndpointId, loaded.activeEndpointId)
+  })
+
+  it('drops whitespace from every stored URL, wherever it came from', () => {
+    // The mirror, a legacy install and an imported config all land here, and a URL with a
+    // space in it is unusable, so this boundary is where it stops.
+    saveRuntimeConfig({
+      endpoints: [{ id: 'a', name: 'Devnet', url: ' https: //devnet.example/rpc ' }],
+      activeEndpointId: 'a',
+    })
+
+    assert.equal(activeRpcUrl(loadRuntimeConfig()), 'https://devnet.example/rpc')
+  })
+
+  it('accepts only http(s) URLs as endpoints', () => {
+    assert.equal(isEndpointUrl('http://localhost:3010/rpc'), true)
+    assert.equal(isEndpointUrl('https: //devnet.example/rpc'), true)
+    // No scheme, or one fetch cannot use.
+    assert.equal(isEndpointUrl('devnet.example/rpc'), false)
+    assert.equal(isEndpointUrl('ws://devnet.example/rpc'), false)
+    assert.equal(isEndpointUrl(''), false)
   })
 
   it('falls back to the first endpoint when the id in use is gone', () => {

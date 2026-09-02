@@ -1,9 +1,11 @@
 import { strict as assert } from 'node:assert'
 import { afterEach, beforeEach, describe, it } from 'node:test'
 import { act, cleanup, render } from '@testing-library/react'
+import { NetworkContext } from '@/network/NetworkContext'
 import { useVault } from '@/vault/useVault'
 import { type VaultContextValue, VaultProvider } from '@/vault/VaultContext'
 
+// addAccount stamps the network the endpoint in use reports, so the vault needs one reported.
 const captureVault = (): { ref: { current: VaultContextValue | null } } => {
   const ref: { current: VaultContextValue | null } = { current: null }
   const Probe = (): null => {
@@ -11,9 +13,11 @@ const captureVault = (): { ref: { current: VaultContextValue | null } } => {
     return null
   }
   render(
-    <VaultProvider>
-      <Probe />
-    </VaultProvider>,
+    <NetworkContext.Provider value={{ connected: true, networkId: 'canton:local' }}>
+      <VaultProvider>
+        <Probe />
+      </VaultProvider>
+    </NetworkContext.Provider>,
   )
   return { ref }
 }
@@ -27,7 +31,6 @@ const addAccount = async (
     const account = await ref.current?.addAccount({
       name,
       partyId: `party-${name}`,
-      network: 'localnet',
       privateKeyHex: 'aa'.repeat(32),
       publicKeyBase64: 'cHVibGlj',
     })

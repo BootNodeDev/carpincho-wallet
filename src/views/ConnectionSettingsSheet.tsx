@@ -34,12 +34,13 @@ export const ConnectionSettingsSheet = ({
     }
   }
 
+  // Picking a row is the whole switch, so the sheet has nothing left to do either way.
   const onSelect = (endpoint: WalletServiceEndpoint): void => {
-    if (endpoint.id === config.activeEndpointId) {
-      return
+    if (endpoint.id !== config.activeEndpointId) {
+      saveConfig({ ...config, activeEndpointId: endpoint.id })
+      toast.success(`Now using ${endpoint.name}`)
     }
-    saveConfig({ ...config, activeEndpointId: endpoint.id })
-    toast.success(`Now using ${endpoint.name}`)
+    handleOpenChange(false)
   }
 
   const onSubmit = ({ name, url }: { name: string; url: string }): void => {

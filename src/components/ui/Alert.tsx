@@ -36,19 +36,18 @@ export const Alert = ({
     onDismiss !== undefined && 'flex items-center justify-between gap-3',
     className,
   )
-  if (onDismiss === undefined) {
-    return <div className={base}>{children}</div>
-  }
   return (
     <div className={base}>
-      <span className="min-w-0">{children}</span>
-      <button
-        type="button"
-        className="shrink-0 border-0 bg-transparent text-current font-semibold text-[0.82rem] uppercase tracking-wider p-0 hover:underline"
-        onClick={onDismiss}
-      >
-        {dismissLabel}
-      </button>
+      {onDismiss === undefined ? children : <span className="min-w-0">{children}</span>}
+      {onDismiss !== undefined && (
+        <button
+          type="button"
+          className="shrink-0 border-0 bg-transparent text-current font-semibold text-[0.82rem] uppercase tracking-wider p-0 hover:underline"
+          onClick={onDismiss}
+        >
+          {dismissLabel}
+        </button>
+      )}
     </div>
   )
 }

@@ -81,7 +81,7 @@ export const AccountsDialog = ({ open, onOpenChange }: AccountsDialogProps): JSX
         removeTarget !== null
           ? 'Confirm removing this account.'
           : isAdd
-            ? 'Create a new Canton party.'
+            ? 'Create an account and its Canton party.'
             : 'Switch, add, or remove accounts.'
       }
       onBack={isAdd ? () => setScreen('list') : undefined}

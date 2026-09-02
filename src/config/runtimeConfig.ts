@@ -56,6 +56,21 @@ export const endpointNameFromUrl = (url: string): string => {
   }
 }
 
+// A URL cannot contain whitespace, so a space in one is a typo or a paste artifact, never
+// intent. Dropping it keeps a slip like "https:/​/host" typed as "https: /host" usable instead
+// of saving an endpoint every request would fail against.
+export const normalizeEndpointUrl = (url: string): string => url.replace(/\s+/g, '')
+
+// What fetch can actually reach. Anything else can only fail later, at request time.
+export const isEndpointUrl = (url: string): boolean => {
+  try {
+    const { protocol } = new URL(normalizeEndpointUrl(url))
+    return protocol === 'http:' || protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 export const newEndpointId = (): string => crypto.randomUUID()
 
 const singleEndpointConfig = (url: string, name: string): RuntimeConfig => {
@@ -92,7 +107,9 @@ export const withActiveEndpointUrl = (config: RuntimeConfig, url: string): Runti
 
 const sanitizeEndpoint = (raw: unknown): WalletServiceEndpoint | undefined => {
   const endpoint = raw as Partial<WalletServiceEndpoint> | null
-  const url = typeof endpoint?.url === 'string' ? endpoint.url.trim() : ''
+  // Every stored, mirrored and migrated URL passes through here, so this is where whitespace
+  // is dropped for good, whatever put it there.
+  const url = typeof endpoint?.url === 'string' ? normalizeEndpointUrl(endpoint.url) : ''
   if (url === '') {
     return undefined
   }

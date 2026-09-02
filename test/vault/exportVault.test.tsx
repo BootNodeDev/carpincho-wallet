@@ -1,11 +1,13 @@
 import { strict as assert } from 'node:assert'
 import { afterEach, beforeEach, describe, it } from 'node:test'
 import { act, cleanup, render } from '@testing-library/react'
+import { NetworkContext } from '@/network/NetworkContext'
 import { decryptVault } from '@/vault/crypto'
 import type { CarpinchoBackup, VaultEnvelope } from '@/vault/types'
 import { useVault } from '@/vault/useVault'
 import { type VaultContextValue, VaultProvider } from '@/vault/VaultContext'
 
+// addAccount stamps the network the endpoint in use reports, so the vault needs one reported.
 const captureVault = (): { ref: { current: VaultContextValue | null } } => {
   const ref: { current: VaultContextValue | null } = { current: null }
   const Probe = (): null => {
@@ -13,9 +15,11 @@ const captureVault = (): { ref: { current: VaultContextValue | null } } => {
     return null
   }
   render(
-    <VaultProvider>
-      <Probe />
-    </VaultProvider>,
+    <NetworkContext.Provider value={{ connected: true, networkId: 'canton:local' }}>
+      <VaultProvider>
+        <Probe />
+      </VaultProvider>
+    </NetworkContext.Provider>,
   )
   return { ref }
 }
@@ -34,7 +38,6 @@ describe('VaultContext.exportEncryptedVault', () => {
       await ref.current?.addAccount({
         name: 'alice',
         partyId: 'alice::ns',
-        network: 'localnet',
         privateKeyHex: 'aa'.repeat(32),
         publicKeyBase64: 'alice-pub',
       })
@@ -56,6 +59,7 @@ describe('VaultContext.exportEncryptedVault', () => {
     assert.equal(envelope.accounts.length, 1)
     assert.equal(envelope.accounts[0]?.partyId, 'alice::ns')
     assert.equal(envelope.accounts[0]?.privateKeyHex, 'aa'.repeat(32))
+    assert.equal(envelope.accounts[0]?.network, 'canton:local')
   })
 
   it('throws when the typed password is not the current vault password', async () => {

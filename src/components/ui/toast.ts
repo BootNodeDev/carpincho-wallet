@@ -26,11 +26,6 @@ const DEFAULT_DURATION_MS: Record<ToastVariant, number> = {
   error: Number.POSITIVE_INFINITY,
 }
 
-export const NEVER_DISMISS_MS = 2_147_483_647
-
-export const resolveDurationMs = (durationMs: number): number =>
-  Number.isFinite(durationMs) ? durationMs : NEVER_DISMISS_MS
-
 let entries: ReadonlyArray<ToastEntry> = []
 const listeners = new Set<Listener>()
 
