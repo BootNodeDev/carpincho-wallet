@@ -63,6 +63,12 @@ type ActionApi = {
   setBadgeBackgroundColor?: (details: { color: string }) => Promise<void> | void
 }
 
+type DisplayBounds = { left: number; top: number; width: number; height: number }
+
+type SystemDisplayApi = {
+  getInfo: () => Promise<Array<{ isPrimary?: boolean; workArea?: DisplayBounds }> | undefined>
+}
+
 type WindowsApi = {
   create: (details: {
     url: string
@@ -70,7 +76,10 @@ type WindowsApi = {
     focused: boolean
     width: number
     height: number
+    left?: number
+    top?: number
   }) => Promise<{ id?: number } | undefined>
+  getLastFocused: () => Promise<Partial<DisplayBounds> | undefined>
   update: (windowId: number, details: { focused: boolean }) => Promise<unknown>
   remove: (windowId: number) => Promise<void>
   onRemoved: {
@@ -85,6 +94,7 @@ const chromeApi = (
       action?: ActionApi
       tabs?: TabsApi
       windows?: WindowsApi
+      system?: { display?: SystemDisplayApi }
     }
   }
 ).chrome
@@ -201,14 +211,58 @@ const updateActionBadge = async (): Promise<void> => {
 // window on screen, `opening` a create still in flight.
 const approvalWindow: { id?: number; opening?: Promise<void> } = {}
 
+const APPROVAL_WINDOW_WIDTH = 420
+const APPROVAL_WINDOW_HEIGHT = 640
+
+const holds = (area: DisplayBounds, x: number, y: number): boolean =>
+  x >= area.left && x < area.left + area.width && y >= area.top && y < area.top + area.height
+
+// Work area is the display minus the menu bar, dock, or taskbar.
+const workAreas = async (): Promise<Array<{ area: DisplayBounds; isPrimary: boolean }>> => {
+  const displays = await chromeApi?.system?.display?.getInfo()
+  return (displays ?? []).flatMap((display) =>
+    display.workArea === undefined
+      ? []
+      : [{ area: display.workArea, isPrimary: display.isPrimary === true }],
+  )
+}
+
+// Centers the window on the display the user is actually on, which is the one holding the
+// middle of the focused browser window. Falls back to the primary display, and then to
+// undefined, meaning nothing to measure so Chrome picks the spot.
+const approvalWindowCenter = async (): Promise<{ left: number; top: number } | undefined> => {
+  try {
+    const [displays, focused] = await Promise.all([
+      workAreas(),
+      chromeApi?.windows?.getLastFocused().catch(() => undefined),
+    ])
+    if (displays.length === 0) {
+      return undefined
+    }
+    const x = (focused?.left ?? 0) + (focused?.width ?? 0) / 2
+    const y = (focused?.top ?? 0) + (focused?.height ?? 0) / 2
+    const { area } =
+      displays.find((display) => holds(display.area, x, y)) ??
+      displays.find((display) => display.isPrimary) ??
+      displays[0]
+    return {
+      left: Math.max(Math.round(area.left + (area.width - APPROVAL_WINDOW_WIDTH) / 2), 0),
+      top: Math.max(Math.round(area.top + (area.height - APPROVAL_WINDOW_HEIGHT) / 2), 0),
+    }
+  } catch {
+    return undefined
+  }
+}
+
 const createApprovalWindow = async (): Promise<void> => {
   try {
     const created = await chromeApi?.windows?.create({
       url: chromeApi?.runtime?.getURL('index.html') ?? 'index.html',
       type: 'popup',
       focused: true,
-      width: 420,
-      height: 640,
+      width: APPROVAL_WINDOW_WIDTH,
+      height: APPROVAL_WINDOW_HEIGHT,
+      ...(await approvalWindowCenter()),
     })
     if (created?.id === undefined) {
       return

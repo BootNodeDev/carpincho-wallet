@@ -20,14 +20,39 @@ const store: Record<string, unknown> = {
 }
 const relayed: Array<{ tabId: number; message: RuntimeEventRelay }> = []
 const queried: Array<string | string[] | undefined> = []
-const createdWindows: Array<{ url: string; type: string; focused: boolean }> = []
+// Two stubbed displays side by side, with the browser window on the second one
+const PRIMARY_AREA = { left: 0, top: 25, width: 1440, height: 850 }
+const SECOND_AREA = { left: 1440, top: 0, width: 1920, height: 1080 }
+const BROWSER_ON_SECOND = { left: 1500, top: 100, width: 1200, height: 800 }
+
+const centerOf = (area: typeof PRIMARY_AREA): { left: number; top: number } => ({
+  left: area.left + (area.width - 420) / 2,
+  top: area.top + (area.height - 640) / 2,
+})
+
+const createdWindows: Array<{
+  url: string
+  type: string
+  focused: boolean
+  left?: number
+  top?: number
+}> = []
 const focusedWindows: number[] = []
 const removedWindows: number[] = []
 // With `hold` set, `windows.create` parks until `release` is called, so a test can run work
-// inside the gap where the window is still opening.
-const windowStub: { hold: boolean; release: () => void } = {
+// inside the gap where the window is still opening. `noDisplay` makes `system.display.getInfo`
+// fail the way it does without the permission, and `noFocusedWindow` makes `getLastFocused`
+// fail the way it does with no browser window open.
+const windowStub: {
+  hold: boolean
+  release: () => void
+  noDisplay: boolean
+  noFocusedWindow: boolean
+} = {
   hold: false,
   release: () => undefined,
+  noDisplay: false,
+  noFocusedWindow: false,
 }
 let listener: Listener | undefined
 let windowRemoved: WindowRemovedListener | undefined
@@ -39,6 +64,8 @@ const resetWindowCalls = (): void => {
   focusedWindows.length = 0
   removedWindows.length = 0
   windowStub.hold = false
+  windowStub.noDisplay = false
+  windowStub.noFocusedWindow = false
 }
 
 const waitFor = async (done: () => boolean): Promise<void> => {
@@ -72,8 +99,33 @@ before(async () => {
           relayed.push({ tabId, message })
         },
       },
+      system: {
+        display: {
+          getInfo: async () => {
+            if (windowStub.noDisplay) {
+              throw new Error('system.display permission missing')
+            }
+            return [
+              { isPrimary: true, workArea: PRIMARY_AREA },
+              { isPrimary: false, workArea: SECOND_AREA },
+            ]
+          },
+        },
+      },
       windows: {
-        create: async (details: { url: string; type: string; focused: boolean }) => {
+        getLastFocused: async () => {
+          if (windowStub.noFocusedWindow) {
+            throw new Error('no window open')
+          }
+          return BROWSER_ON_SECOND
+        },
+        create: async (details: {
+          url: string
+          type: string
+          focused: boolean
+          left?: number
+          top?: number
+        }) => {
           createdWindows.push(details)
           if (windowStub.hold) {
             await new Promise<void>((resolve) => {
@@ -176,6 +228,9 @@ describe('background: opening the wallet for a queued request', () => {
     assert.equal(createdWindows[0].url, 'chrome-extension://test/index.html')
     assert.equal(createdWindows[0].type, 'popup')
     assert.equal(createdWindows[0].focused, true)
+    // Centered on the display the browser is on, not the primary one
+    assert.equal(createdWindows[0].left, centerOf(SECOND_AREA).left)
+    assert.equal(createdWindows[0].top, centerOf(SECOND_AREA).top)
     assert.deepEqual(focusedWindows, [])
   })
 
@@ -232,6 +287,38 @@ describe('background: answering the last request', () => {
     assert.equal(createdWindows.length, 1)
     assert.deepEqual(removedWindows, [APPROVAL_WINDOW_ID])
     assert.deepEqual(answers[0].result, { isConnected: true })
+  })
+})
+
+describe('background: nothing to tell which display the user is on', () => {
+  before(resetWindowCalls)
+
+  it('centers on the primary display when no browser window is open', async () => {
+    windowStub.noFocusedWindow = true
+    const answers: JsonRpcResponse[] = []
+    queueConnect(7, 'http://localhost:9006', answers)
+    await waitFor(() => createdWindows.length >= 1)
+
+    assert.equal(createdWindows[0].left, centerOf(PRIMARY_AREA).left)
+    assert.equal(createdWindows[0].top, centerOf(PRIMARY_AREA).top)
+
+    answerConnect('7')
+    await waitFor(() => removedWindows.length >= 1)
+  })
+
+  it('lets Chrome place the window when no display can be measured', async () => {
+    resetWindowCalls()
+    windowStub.noDisplay = true
+    const answers: JsonRpcResponse[] = []
+    queueConnect(8, 'http://localhost:9007', answers)
+    await waitFor(() => createdWindows.length >= 1)
+
+    assert.equal(createdWindows[0].left, undefined)
+    assert.equal(createdWindows[0].top, undefined)
+
+    // Leave the window closed for the next group
+    answerConnect('8')
+    await waitFor(() => removedWindows.length >= 1)
   })
 })
 
