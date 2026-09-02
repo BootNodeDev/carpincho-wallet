@@ -1,0 +1,15 @@
+# Gitleaks config: the stock rule set plus one allowlist.
+# Keep this file tiny. Anything added here stops being scanned, forever.
+[extend]
+useDefault = true
+
+# The generic-api-key rule reads a TypeScript type annotation on an `*api`-named
+# binding (`const api: Cip56HoldingsApi = {`) as a high-entropy secret. The type
+# name is the "secret", so every such declaration is a false positive. Matching
+# the annotation shape rather than pinning commit fingerprints keeps the
+# exception from expiring the next time one of those lines is edited.
+[[rules]]
+id = "generic-api-key"
+[rules.allowlist]
+regexTarget = "match"
+regexes = ['''(?i)[a-z0-9_]*api\s*:\s*[A-Z][A-Za-z0-9_]*(Api|Client|Service)\b''']

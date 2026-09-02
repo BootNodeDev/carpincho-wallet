@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreExportsUsedInFile": true,
+  "entry": [
+    "index.html",
+    "src/extension/contentScript.ts",
+    "src/extension/background.ts",
+    "test/**/*.test.{ts,tsx}"
+  ],
+  "project": ["src/**/*.{ts,tsx,css}", "test/**/*.{ts,tsx}"]
+}

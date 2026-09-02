@@ -6,7 +6,7 @@ import { getSdkError } from '@walletconnect/utils'
 import { getWalletServiceNetworkId } from '@/api/walletService'
 import type { ProviderResponder } from '@/provider/types'
 
-export const CANTON_NAMESPACE = 'canton'
+const CANTON_NAMESPACE = 'canton'
 
 export const CANTON_METHOD_CONNECT = 'connect'
 export const CANTON_METHOD_DISCONNECT = 'disconnect'
