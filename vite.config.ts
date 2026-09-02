@@ -17,6 +17,15 @@ const appVersion = pkg.version
 // prerelease/build metadata (e.g. 1.2.0-rc.1 -> 1.2.0).
 const manifestVersion = appVersion.split(/[-+]/)[0]
 
+// The icon the content script announces to a dApp, inlined from the same PNG the manifest
+// ships as the toolbar icon: the SDK types AnnouncedProvider.icon as a data or https URL, and
+// its wallet picker renders in a blob: document that cannot load an extension URL. A define
+// rather than an asset import because public/ files are not part of the module graph, and
+// Vite's inline threshold would silently emit a URL again once the PNG grows past 4 KB.
+const walletIconDataUrl = `data:image/png;base64,${readFileSync(
+  resolve(__dirname, 'public/icons/carpincho-48.png'),
+).toString('base64')}`
+
 const injectManifestVersion = (): Plugin => ({
   name: 'carpincho-manifest-version',
   apply: 'build',
@@ -35,6 +44,7 @@ export default defineConfig(({ mode }) => {
     base: isExtension ? './' : '/',
     define: {
       __APP_VERSION__: JSON.stringify(appVersion),
+      __WALLET_ICON_DATA_URL__: JSON.stringify(walletIconDataUrl),
     },
     plugins: [tailwindcss(), react(), ...(isExtension ? [injectManifestVersion()] : [])],
     resolve: {

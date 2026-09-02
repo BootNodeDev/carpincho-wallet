@@ -57,6 +57,27 @@ describe('extension packaging', () => {
     assert.doesNotMatch(contentScript, /\bfrom\s*["'][^"']+["']/)
   })
 
+  it('builds the announced wallet icon define from the shipped PNG', () => {
+    // A source-level check on purpose: the announcement test in test/extension asserts against
+    // the value test/setup-dom.ts mirrors for the node runner, so dropping or repointing the
+    // define would not fail there. This does.
+    const viteConfig = readText('vite.config.ts')
+
+    assert.match(viteConfig, /__WALLET_ICON_DATA_URL__/)
+    assert.match(viteConfig, /data:image\/png;base64,/)
+    assert.match(viteConfig, /public\/icons\/carpincho-48\.png/)
+  })
+
+  it('inlines the announced wallet icon in the built content script', () => {
+    // The SDK types the announced icon as a data or https URL, and its picker renders in a
+    // blob: document, so the extension URL this used to announce could not load.
+    const contentScript = readText('dist-extension/contentScript.js')
+    const encoded = readFileSync('public/icons/carpincho-48.png').toString('base64')
+
+    assert.ok(contentScript.includes(`data:image/png;base64,${encoded}`))
+    assert.doesNotMatch(contentScript, /getURL\(["'`]icons\//)
+  })
+
   it('does not depend on remote stylesheet assets', () => {
     const html = readText('index.html')
     assert.doesNotMatch(html, /cdn\.jsdelivr\.net/)
