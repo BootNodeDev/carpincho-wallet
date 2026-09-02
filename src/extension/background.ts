@@ -59,9 +59,32 @@ type RuntimeApi = {
 }
 
 type ActionApi = {
-  openPopup?: () => Promise<void> | void
   setBadgeText?: (details: { text: string }) => Promise<void> | void
   setBadgeBackgroundColor?: (details: { color: string }) => Promise<void> | void
+}
+
+type DisplayBounds = { left: number; top: number; width: number; height: number }
+
+type SystemDisplayApi = {
+  getInfo: () => Promise<Array<{ isPrimary?: boolean; workArea?: DisplayBounds }> | undefined>
+}
+
+type WindowsApi = {
+  create: (details: {
+    url: string
+    type: 'popup'
+    focused: boolean
+    width: number
+    height: number
+    left?: number
+    top?: number
+  }) => Promise<{ id?: number } | undefined>
+  getLastFocused: () => Promise<Partial<DisplayBounds> | undefined>
+  update: (windowId: number, details: { focused: boolean }) => Promise<unknown>
+  remove: (windowId: number) => Promise<void>
+  onRemoved: {
+    addListener: (listener: (windowId: number) => void) => void
+  }
 }
 
 const chromeApi = (
@@ -70,6 +93,8 @@ const chromeApi = (
       runtime?: RuntimeApi
       action?: ActionApi
       tabs?: TabsApi
+      windows?: WindowsApi
+      system?: { display?: SystemDisplayApi }
     }
   }
 ).chrome
@@ -180,8 +205,102 @@ const updateActionBadge = async (): Promise<void> => {
   }
 }
 
-const openWalletPopup = async (): Promise<void> => {
-  await chromeApi?.action?.openPopup?.()
+// Chrome only allows `action.openPopup` from a gesture-carrying event, and the window focused
+// when a dApp request lands is the SDK's toolbar-less picker, so the toolbar popup cannot be
+// opened from here. The wallet gets its own popup window instead, one at a time: `id` is the
+// window on screen, `opening` a create still in flight.
+const approvalWindow: { id?: number; opening?: Promise<void> } = {}
+
+const APPROVAL_WINDOW_WIDTH = 420
+const APPROVAL_WINDOW_HEIGHT = 640
+
+const holds = (area: DisplayBounds, x: number, y: number): boolean =>
+  x >= area.left && x < area.left + area.width && y >= area.top && y < area.top + area.height
+
+// Work area is the display minus the menu bar, dock, or taskbar.
+const workAreas = async (): Promise<Array<{ area: DisplayBounds; isPrimary: boolean }>> => {
+  const displays = await chromeApi?.system?.display?.getInfo()
+  return (displays ?? []).flatMap((display) =>
+    display.workArea === undefined
+      ? []
+      : [{ area: display.workArea, isPrimary: display.isPrimary === true }],
+  )
+}
+
+// Centers the window on the display the user is actually on, which is the one holding the
+// middle of the focused browser window. Falls back to the primary display, and then to
+// undefined, meaning nothing to measure so Chrome picks the spot.
+const approvalWindowCenter = async (): Promise<{ left: number; top: number } | undefined> => {
+  try {
+    const [displays, focused] = await Promise.all([
+      workAreas(),
+      chromeApi?.windows?.getLastFocused().catch(() => undefined),
+    ])
+    if (displays.length === 0) {
+      return undefined
+    }
+    const x = (focused?.left ?? 0) + (focused?.width ?? 0) / 2
+    const y = (focused?.top ?? 0) + (focused?.height ?? 0) / 2
+    const { area } =
+      displays.find((display) => holds(display.area, x, y)) ??
+      displays.find((display) => display.isPrimary) ??
+      displays[0]
+    return {
+      left: Math.max(Math.round(area.left + (area.width - APPROVAL_WINDOW_WIDTH) / 2), 0),
+      top: Math.max(Math.round(area.top + (area.height - APPROVAL_WINDOW_HEIGHT) / 2), 0),
+    }
+  } catch {
+    return undefined
+  }
+}
+
+const createApprovalWindow = async (): Promise<void> => {
+  try {
+    const created = await chromeApi?.windows?.create({
+      url: chromeApi?.runtime?.getURL('index.html') ?? 'index.html',
+      type: 'popup',
+      focused: true,
+      width: APPROVAL_WINDOW_WIDTH,
+      height: APPROVAL_WINDOW_HEIGHT,
+      ...(await approvalWindowCenter()),
+    })
+    if (created?.id === undefined) {
+      return
+    }
+    // Every request this window was for got answered while the create was still in flight
+    // (the toolbar popup was already open, say): close it rather than pop it up over nothing.
+    if (pendingRequests.size === 0) {
+      await chromeApi?.windows?.remove(created.id)
+      return
+    }
+    approvalWindow.id = created.id
+  } finally {
+    approvalWindow.opening = undefined
+  }
+}
+
+const openApprovalWindow = async (): Promise<void> => {
+  // Claimed synchronously: two requests landing in the same tick must not each open a window.
+  if (approvalWindow.opening === undefined && approvalWindow.id === undefined) {
+    approvalWindow.opening = createApprovalWindow()
+    return approvalWindow.opening
+  }
+  await approvalWindow.opening
+  const { id } = approvalWindow
+  if (id !== undefined) {
+    await chromeApi?.windows?.update(id, { focused: true })
+  }
+}
+
+// Forgets the window before removing it so the `onRemoved` listener does not read a close
+// the wallet asked for as the user dismissing the prompt.
+const closeApprovalWindow = async (): Promise<void> => {
+  const { id } = approvalWindow
+  approvalWindow.id = undefined
+  if (id === undefined) {
+    return
+  }
+  await chromeApi?.windows?.remove(id)
 }
 
 const queueProviderRequest = async (
@@ -199,9 +318,28 @@ const queueProviderRequest = async (
     pending,
     sendResponse: (response) => sendResponse(response),
   })
-  await updateActionBadge().catch(() => undefined)
-  await notifyWalletViews(pending)
-  await openWalletPopup().catch(() => undefined)
+  // Nothing here depends on the others, and the window is what the user is waiting for:
+  // pushing to already-open views must not delay it.
+  await Promise.all([
+    openApprovalWindow().catch(() => undefined),
+    updateActionBadge().catch(() => undefined),
+    notifyWalletViews(pending),
+  ])
+}
+
+// Closing the wallet window is the user walking away from every prompt it was showing:
+// each still-pending request has to be answered or the dApp's call never settles.
+const rejectPendingRequests = (): void => {
+  const abandoned = [...pendingRequests.values()]
+  pendingRequests.clear()
+  for (const entry of abandoned) {
+    try {
+      entry.sendResponse(jsonRpcError(entry.pending.request.id, 4001, 'user rejected'))
+    } catch {
+      // A dApp whose port is already gone cannot be told; the rest still have to be.
+    }
+  }
+  void updateActionBadge().catch(() => undefined)
 }
 
 // Resolves whether the requesting origin has an approved direct connection.
@@ -235,6 +373,14 @@ const handleProviderRequest = async (
   }
   await queueProviderRequest(message, sendResponse)
 }
+
+chromeApi?.windows?.onRemoved.addListener((windowId) => {
+  if (windowId !== approvalWindow.id) {
+    return
+  }
+  approvalWindow.id = undefined
+  rejectPendingRequests()
+})
 
 chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'CARPINCHO_PROVIDER_REQUEST') {
@@ -283,6 +429,9 @@ chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
       message.response,
     ).catch(() => undefined)
     void updateActionBadge().catch(() => undefined)
+    if (pendingRequests.size === 0) {
+      void closeApprovalWindow().catch(() => undefined)
+    }
     sendResponse({ ok: true })
     return false
   }

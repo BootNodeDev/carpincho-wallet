@@ -63,12 +63,13 @@ describe('extension postMessage bridge', () => {
     )
   })
 
-  it('uses the extension action popup instead of opening tabs or windows', () => {
+  // How the wallet is shown is asserted for real in test/extension/background.test.ts; this
+  // only keeps the one rule that has no behaviour to observe: a tab would put the wallet on a
+  // page any script can address, so it must never be one.
+  it('never shows a request in a tab', () => {
     const background = readText('src/extension/background.ts')
 
-    assert.match(background, /openPopup/)
     assert.match(background, /setBadgeText/)
-    assert.doesNotMatch(background, /windows\.create/)
-    assert.doesNotMatch(background, /tabs\.create/)
+    assert.doesNotMatch(background, /tabs\??\.create/)
   })
 })
