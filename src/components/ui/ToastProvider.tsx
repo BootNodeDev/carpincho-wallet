@@ -1,5 +1,5 @@
 import * as RadixToast from '@radix-ui/react-toast'
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { FeedbackVariant } from '@/components/ui/Alert'
 import { ICON_BUTTON_CLASS } from '@/components/ui/Button'
@@ -11,7 +11,7 @@ import {
   INFO_ICON,
   X_ICON,
 } from '@/components/ui/icons'
-import { resolveDurationMs, subscribeToasts, type ToastEntry, toast } from '@/components/ui/toast'
+import { subscribeToasts, type ToastEntry, toast } from '@/components/ui/toast'
 import { copyText } from '@/utils/clipboard'
 import { cn } from '@/utils/cn'
 
@@ -69,13 +69,36 @@ const ToastItem = ({ entry }: ToastItemProps): JSX.Element => {
     const text = descriptionRef.current?.textContent?.trim() ?? ''
     if (text) copyText(text, 'Message copied')
   }
+
+  const [open, setOpen] = useState(true)
+  // One way out, for the timer below and for the close button alike: animate out, then drop the
+  // entry once the animation has had its time.
+  const close = useCallback((): void => {
+    setOpen(false)
+    window.setTimeout(() => toast.dismiss(entry.id), CLOSE_ANIMATION_MS)
+  }, [entry.id])
+
+  // Radix pauses its own close timer while the window is blurred or the pointer sits over the
+  // viewport, and resumes only on focus / pointerleave, so a toast could stay up for good — in
+  // a popup this narrow the viewport band overlaps the content. An infinite `duration` opts out
+  // of that timer entirely (Radix starts none) and the lifetime is timed here instead, so an
+  // auto-dismissing variant goes after its own duration whatever the window is doing.
+  useEffect(() => {
+    if (!Number.isFinite(entry.durationMs)) {
+      return undefined
+    }
+    const timer = window.setTimeout(close, entry.durationMs)
+    return () => window.clearTimeout(timer)
+  }, [entry.durationMs, close])
+
   return (
     <RadixToast.Root
-      duration={resolveDurationMs(entry.durationMs)}
+      open={open}
+      duration={Number.POSITIVE_INFINITY}
       type={ANNOUNCE_TYPE[entry.variant]}
-      onOpenChange={(open) => {
-        if (!open) {
-          window.setTimeout(() => toast.dismiss(entry.id), CLOSE_ANIMATION_MS)
+      onOpenChange={(next) => {
+        if (!next) {
+          close()
         }
       }}
       className={cn(BASE_TOAST_CLASS, accent.rail)}

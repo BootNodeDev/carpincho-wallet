@@ -2,13 +2,7 @@ import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
 import { act, cleanup, render } from '@testing-library/react'
 import { ToastProvider } from '@/components/ui/ToastProvider'
-import {
-  getToastEntries,
-  NEVER_DISMISS_MS,
-  resolveDurationMs,
-  subscribeToasts,
-  toast,
-} from '@/components/ui/toast'
+import { getToastEntries, subscribeToasts, toast } from '@/components/ui/toast'
 
 describe('toast emitter', () => {
   afterEach(() => {
@@ -102,23 +96,6 @@ describe('toast emitter', () => {
   })
 })
 
-describe('resolveDurationMs', () => {
-  it('passes finite durations through unchanged', () => {
-    assert.equal(resolveDurationMs(5000), 5000)
-    assert.equal(resolveDurationMs(0), 0)
-  })
-
-  it('maps POSITIVE_INFINITY to a setTimeout-safe sentinel', () => {
-    const resolved = resolveDurationMs(Number.POSITIVE_INFINITY)
-    assert.equal(resolved, NEVER_DISMISS_MS)
-    assert.ok(resolved <= 2_147_483_647, 'must fit in a 32-bit signed integer')
-  })
-
-  it('maps NaN to the same sentinel', () => {
-    assert.equal(resolveDurationMs(Number.NaN), NEVER_DISMISS_MS)
-  })
-})
-
 describe('ToastProvider', () => {
   afterEach(() => {
     toast.clear()
@@ -138,5 +115,40 @@ describe('ToastProvider', () => {
       (li) => li.querySelector('div')?.textContent ?? '',
     )
     assert.deepEqual(messages, ['third', 'second', 'first'])
+  })
+
+  it('dismisses an auto-dismissing toast even while the window is blurred', async () => {
+    // Radix pauses its own close timer on window blur and on a pointer over the viewport,
+    // resuming only on focus / pointerleave, which left toasts up for good. The provider owns
+    // the timer instead, so neither event can hold one open.
+    render(<ToastProvider>nothing</ToastProvider>)
+    act(() => void toast.success('Now using Devnet'))
+
+    window.dispatchEvent(new Event('blur'))
+    document.body
+      .querySelector('li[data-state="open"]')
+      ?.dispatchEvent(new Event('pointermove', { bubbles: true }))
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5200))
+    })
+    assert.equal(document.body.querySelectorAll('li[data-state="open"]').length, 0)
+
+    // The entry outlives the exit animation, then goes.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400))
+    })
+    assert.equal(getToastEntries().length, 0)
+  })
+
+  it('keeps an error toast up, since only a person can clear it', async () => {
+    render(<ToastProvider>nothing</ToastProvider>)
+    act(() => void toast.error('Create account failed'))
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5200))
+    })
+    assert.equal(document.body.querySelectorAll('li[data-state="open"]').length, 1)
+    assert.equal(getToastEntries().length, 1)
   })
 })
