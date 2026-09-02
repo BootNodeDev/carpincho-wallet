@@ -8,7 +8,7 @@ import { SEARCH_ICON, X_ICON } from '@/components/ui/icons'
 import { Sheet } from '@/components/ui/Sheet'
 import { TextInput } from '@/components/ui/TextInput'
 import { toast } from '@/components/ui/toast'
-import { offNetworkAccountsNote, sortAccounts } from '@/utils/account'
+import { sortAccounts } from '@/utils/account'
 import { cn } from '@/utils/cn'
 import type { AccountPublic } from '@/vault/types'
 import { useVault } from '@/vault/useVault'
@@ -162,15 +162,6 @@ export const AccountsDialog = ({ open, onOpenChange }: AccountsDialogProps): JSX
               ))
             )}
           </div>
-          {/* The vault keeps accounts for every network; say so rather than let them look lost. */}
-          {v.offNetworkCount > 0 && (
-            <p
-              data-testid="accounts-off-network"
-              className="m-0 px-2 text-[0.8rem] leading-relaxed text-muted-foreground"
-            >
-              {offNetworkAccountsNote(v.offNetworkCount)}
-            </p>
-          )}
           <AddRowButton
             label="Add account"
             testId="menu-add-account"

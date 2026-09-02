@@ -186,20 +186,13 @@ describe('AccountsDialog', () => {
     assert.equal(onOpenChange.includes(false), false)
   })
 
-  it('accounts for the accounts held on other networks instead of dropping them silently', async () => {
-    renderDialog({ offNetworkCount: 2 })
-    await screen.findByRole('dialog')
-    assert.ok(
-      /2 accounts are on other networks/i.test(
-        screen.getByTestId('accounts-off-network').textContent ?? '',
-      ),
-    )
-  })
-
-  it('says nothing about other networks when the vault holds no such account', async () => {
-    renderDialog({ offNetworkCount: 0 })
-    await screen.findByRole('dialog')
-    assert.equal(screen.queryByTestId('accounts-off-network'), null)
+  it('lists no account the network in use does not host, and says nothing about them', async () => {
+    // The vault keeps them for when the user switches back, but the switcher is about the
+    // accounts that work here.
+    renderDialog({ accounts: [ACCT_A, ACCT_B], primary: ACCT_A, offNetworkCount: 2 })
+    const dialog = await screen.findByRole('dialog')
+    assert.equal(within(dialog).getAllByTestId('account-item').length, 1)
+    assert.equal(/other network/i.test(dialog.textContent ?? ''), false)
   })
 
   it('shows only a create button on the add screen, no cancel button', async () => {

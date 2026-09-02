@@ -120,7 +120,8 @@ export interface VaultContextValue {
   // Scoped to the network the endpoint in use reports; see @/vault/networkScope.
   accounts: AccountPublic[]
   primary: AccountPublic | null
-  // How many accounts the vault holds for other networks, so the UI can account for them.
+  // How many accounts the vault holds for other networks. Routing reads it to tell an endpoint
+  // switch (accounts, just not here) from a first run (no accounts at all).
   offNetworkCount: number
   transactions: TransactionRecord[]
   setPrimary: (id: string) => Promise<void>
