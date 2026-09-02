@@ -195,43 +195,27 @@ const updateActionBadge = async (): Promise<void> => {
   }
 }
 
-// Chrome only allows `action.openPopup` from a gesture-carrying event, and the window
-// focused when a dApp request lands is the SDK's toolbar-less picker, so the toolbar popup
-// cannot be opened here. The wallet is opened as its own popup window instead: one at a
-// time, so a second queued request focuses it rather than opening another.
-const APPROVAL_WINDOW_WIDTH = 420
-const APPROVAL_WINDOW_HEIGHT = 640
-
-// `opening` marks a create still in flight; `generation` counts how many windows have been
-// given up on, so a create can tell whether the one it is about to hand over is still wanted.
-const approvalWindow: { id?: number; opening?: Promise<void>; generation: number } = {
-  generation: 0,
-}
-
-// Stops tracking the current window. Bumping the generation also cancels a create still in
-// flight, and clearing the id keeps the `onRemoved` listener from reading a close the wallet
-// asked for as the user dismissing the prompt.
-const forgetApprovalWindow = (): void => {
-  approvalWindow.id = undefined
-  approvalWindow.generation += 1
-}
+// Chrome only allows `action.openPopup` from a gesture-carrying event, and the window focused
+// when a dApp request lands is the SDK's toolbar-less picker, so the toolbar popup cannot be
+// opened from here. The wallet gets its own popup window instead, one at a time: `id` is the
+// window on screen, `opening` a create still in flight.
+const approvalWindow: { id?: number; opening?: Promise<void> } = {}
 
 const createApprovalWindow = async (): Promise<void> => {
-  const { generation } = approvalWindow
   try {
     const created = await chromeApi?.windows?.create({
       url: chromeApi?.runtime?.getURL('index.html') ?? 'index.html',
       type: 'popup',
       focused: true,
-      width: APPROVAL_WINDOW_WIDTH,
-      height: APPROVAL_WINDOW_HEIGHT,
+      width: 420,
+      height: 640,
     })
     if (created?.id === undefined) {
       return
     }
     // Every request this window was for got answered while the create was still in flight
-    // (the toolbar popup was already open, say). Close it instead of popping it up over nothing.
-    if (approvalWindow.generation !== generation) {
+    // (the toolbar popup was already open, say): close it rather than pop it up over nothing.
+    if (pendingRequests.size === 0) {
       await chromeApi?.windows?.remove(created.id)
       return
     }
@@ -245,18 +229,20 @@ const openApprovalWindow = async (): Promise<void> => {
   // Claimed synchronously: two requests landing in the same tick must not each open a window.
   if (approvalWindow.opening === undefined && approvalWindow.id === undefined) {
     approvalWindow.opening = createApprovalWindow()
-    await approvalWindow.opening
-    return
+    return approvalWindow.opening
   }
   await approvalWindow.opening
-  if (approvalWindow.id !== undefined) {
-    await chromeApi?.windows?.update(approvalWindow.id, { focused: true })
+  const { id } = approvalWindow
+  if (id !== undefined) {
+    await chromeApi?.windows?.update(id, { focused: true })
   }
 }
 
+// Forgets the window before removing it so the `onRemoved` listener does not read a close
+// the wallet asked for as the user dismissing the prompt.
 const closeApprovalWindow = async (): Promise<void> => {
   const { id } = approvalWindow
-  forgetApprovalWindow()
+  approvalWindow.id = undefined
   if (id === undefined) {
     return
   }
@@ -278,9 +264,13 @@ const queueProviderRequest = async (
     pending,
     sendResponse: (response) => sendResponse(response),
   })
-  await updateActionBadge().catch(() => undefined)
-  await notifyWalletViews(pending)
-  await openApprovalWindow().catch(() => undefined)
+  // Nothing here depends on the others, and the window is what the user is waiting for:
+  // pushing to already-open views must not delay it.
+  await Promise.all([
+    openApprovalWindow().catch(() => undefined),
+    updateActionBadge().catch(() => undefined),
+    notifyWalletViews(pending),
+  ])
 }
 
 // Closing the wallet window is the user walking away from every prompt it was showing:
@@ -334,7 +324,7 @@ chromeApi?.windows?.onRemoved.addListener((windowId) => {
   if (windowId !== approvalWindow.id) {
     return
   }
-  forgetApprovalWindow()
+  approvalWindow.id = undefined
   rejectPendingRequests()
 })
 

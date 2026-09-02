@@ -23,8 +23,12 @@ const queried: Array<string | string[] | undefined> = []
 const createdWindows: Array<{ url: string; type: string; focused: boolean }> = []
 const focusedWindows: number[] = []
 const removedWindows: number[] = []
-// How long `windows.create` takes to answer, so tests can put work inside that gap.
-const windowStub = { createDelayMs: 0 }
+// With `hold` set, `windows.create` parks until `release` is called, so a test can run work
+// inside the gap where the window is still opening.
+const windowStub: { hold: boolean; release: () => void } = {
+  hold: false,
+  release: () => undefined,
+}
 let listener: Listener | undefined
 let windowRemoved: WindowRemovedListener | undefined
 
@@ -34,7 +38,7 @@ const resetWindowCalls = (): void => {
   createdWindows.length = 0
   focusedWindows.length = 0
   removedWindows.length = 0
-  windowStub.createDelayMs = 0
+  windowStub.hold = false
 }
 
 const waitFor = async (done: () => boolean): Promise<void> => {
@@ -71,7 +75,11 @@ before(async () => {
       windows: {
         create: async (details: { url: string; type: string; focused: boolean }) => {
           createdWindows.push(details)
-          await new Promise((resolve) => setTimeout(resolve, windowStub.createDelayMs))
+          if (windowStub.hold) {
+            await new Promise<void>((resolve) => {
+              windowStub.release = resolve
+            })
+          }
           return { id: APPROVAL_WINDOW_ID }
         },
         update: async (windowId: number) => {
@@ -117,9 +125,7 @@ describe('background: CARPINCHO_FORGET_CONNECTED_ORIGIN', () => {
         response = r
       },
     )
-    while (response === undefined) {
-      await new Promise((resolve) => setTimeout(resolve, 5))
-    }
+    await waitFor(() => response !== undefined)
 
     // The relay went to that origin's tabs only, before the forget could filter it out
     assert.deepEqual(queried, ['http://localhost:3012/*'])
@@ -229,10 +235,10 @@ describe('background: answering the last request', () => {
   })
 })
 
-describe('background: two requests landing while the window is still opening', () => {
+describe('background: requests landing while the window is still opening', () => {
   before(() => {
     resetWindowCalls()
-    windowStub.createDelayMs = 20
+    windowStub.hold = true
   })
 
   it('opens one window and focuses it, never two', async () => {
@@ -240,6 +246,10 @@ describe('background: two requests landing while the window is still opening', (
     const fifth: JsonRpcResponse[] = []
     queueConnect(4, 'http://localhost:9003', fourth)
     queueConnect(5, 'http://localhost:9004', fifth)
+    // Both requests reach the window logic before the create answers
+    await waitFor(() => createdWindows.length >= 1)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    windowStub.release()
     await waitFor(() => focusedWindows.length >= 1)
 
     assert.equal(createdWindows.length, 1)
@@ -250,22 +260,19 @@ describe('background: two requests landing while the window is still opening', (
     answerConnect('5')
     await waitFor(() => removedWindows.length >= 1)
   })
-})
 
-describe('background: a request answered while the window is still opening', () => {
-  before(() => {
+  it('closes a window whose request was answered before the create answered', async () => {
     resetWindowCalls()
-    windowStub.createDelayMs = 40
-  })
-
-  it('closes the window it opened instead of popping it up over nothing', async () => {
+    windowStub.hold = true
     const answers: JsonRpcResponse[] = []
     queueConnect(6, 'http://localhost:9005', answers)
     await waitFor(() => createdWindows.length >= 1)
     answerConnect('6')
+    windowStub.release()
     await waitFor(() => removedWindows.length >= 1)
 
     assert.equal(createdWindows.length, 1)
     assert.deepEqual(removedWindows, [APPROVAL_WINDOW_ID])
+    assert.deepEqual(answers[0].result, { isConnected: true })
   })
 })
