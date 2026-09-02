@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { ConnectionFooter } from '@/components/ConnectionFooter'
+import { CreateAccountForm } from '@/components/CreateAccountForm'
+import { Card } from '@/components/ui/Card'
 import { toast } from '@/components/ui/toast'
 import { WelcomeHero } from '@/components/WelcomeHero'
 import { useExtensionDappConnection } from '@/extension/dappConnection'
 import { isExtensionRuntime } from '@/extension/runtimeClient'
 import { useNetwork } from '@/network/useNetwork'
 import { ConnectionSettingsSheet } from '@/views/ConnectionSettingsSheet'
-import { CreateFirstAccount } from '@/views/onboarding/CreateFirstAccount'
 import type { ConnectedDappSession } from '@/wc/client'
 
 // No WalletConnect lifecycle runs on this screen, so the footer's dApp row reports only what
@@ -38,7 +39,12 @@ export const AddNetworkAccount = (): JSX.Element => {
           description="Canton development wallet."
           layout="compact"
         />
-        <CreateFirstAccount />
+        {/* Create only, no restore tab: the vault already holds accounts, so its own backup
+            would import nothing here — every entry is a party-and-network duplicate. Restore
+            stays in the drawer, and in first-run onboarding where the vault is empty. */}
+        <Card>
+          <CreateAccountForm />
+        </Card>
       </div>
 
       <ConnectionFooter

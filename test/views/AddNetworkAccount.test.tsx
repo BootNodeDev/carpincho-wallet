@@ -61,6 +61,9 @@ describe('AddNetworkAccount', () => {
   it('asks for an account on this network, as a toast rather than in the form', () => {
     renderView({ offNetworkCount: 2 })
     assert.ok(screen.getByTestId('add-account-hint-input'))
+    // No restore tab: the vault already holds accounts, so its own backup would import
+    // nothing here. Restore lives in the drawer and in first-run onboarding.
+    assert.equal(screen.queryByTestId('onboarding-tab-restore'), null)
     const entries = getToastEntries()
     assert.equal(entries[0]?.variant, 'info')
     assert.equal(entries[0]?.message, 'No account on this network, please create one to proceed.')
