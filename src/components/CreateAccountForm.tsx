@@ -80,12 +80,12 @@ export const CreateAccountForm = ({
             htmlFor="acct-name"
             className="flex gap-1"
           >
-            Username
+            Account name
             <Tooltip
               content={
                 <>This will become the "party hint": the prefix of your on-ledger Canton party ID</>
               }
-              label="Username / party hint"
+              label="Account name / party hint"
             />
           </label>
           <TextInput

@@ -115,12 +115,12 @@ describe('CreateAccountForm', () => {
     assert.ok(screen.getByRole('button', { name: 'Create your account' }))
   })
 
-  it('always shows the username requirements as helper text', () => {
+  it('always shows the account-name requirements as helper text', () => {
     renderForm()
     assert.ok(screen.getByText(/3-64 lowercase/i))
   })
 
-  it('keeps the submit button disabled until the username is valid', async () => {
+  it('keeps the submit button disabled until the account name is valid', async () => {
     const user = userEvent.setup()
     renderForm()
     const submit = screen.getByTestId('add-account-submit') as HTMLButtonElement

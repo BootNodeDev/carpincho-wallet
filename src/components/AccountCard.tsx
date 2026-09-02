@@ -22,7 +22,7 @@ export const AccountCard = ({ primary }: AccountCardProps): JSX.Element => {
             No account yet
           </div>
           <p className="text-soft text-[0.98rem] mb-4">
-            Create your first Canton party to start signing.
+            Create your first account to start signing.
           </p>
           <PrimaryButton
             className="w-full"
