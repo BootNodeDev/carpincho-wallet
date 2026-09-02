@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { type WalletServiceStatusResponse, walletServiceStatus } from '@/api/walletService'
+import {
+  isCantonConnected,
+  type WalletServiceStatusResponse,
+  walletServiceStatus,
+} from '@/api/walletService'
+import { activeRpcUrl } from '@/config/runtimeConfig'
 import { useRuntimeConfig } from '@/config/useRuntimeConfig'
 
 export interface WalletServiceStatus {
@@ -16,7 +21,7 @@ const DEFAULT_POLL_MS = 5000
 
 // Converts the wallet-service status payload into the footer's binary Canton state.
 const statusFromResponse = (status: WalletServiceStatusResponse): WalletServiceStatus => ({
-  connected: status.connection?.isNetworkConnected === true,
+  connected: isCantonConnected(status),
   ...(status.network?.networkId === undefined ? {} : { networkId: status.network.networkId }),
   ...(status.connection?.networkReason === undefined
     ? {}
@@ -30,16 +35,17 @@ export const useWalletServiceStatus = (
   const { config } = useRuntimeConfig()
   const [status, setStatus] = useState<WalletServiceStatus>({ connected: false })
   const pollMs = options.pollMs === undefined ? DEFAULT_POLL_MS : options.pollMs
+  const url = activeRpcUrl(config)
 
   // Probes the configured JSON-RPC endpoint and stores the current Canton connectivity result.
   const refresh = useCallback(async (): Promise<void> => {
     try {
-      const response = await walletServiceStatus({ rpcUrl: config.walletServiceRpcUrl })
+      const response = await walletServiceStatus({ rpcUrl: url })
       setStatus(statusFromResponse(response))
     } catch (error) {
       setStatus({ connected: false, reason: (error as Error).message })
     }
-  }, [config.walletServiceRpcUrl])
+  }, [url])
 
   useEffect(() => {
     void refresh()

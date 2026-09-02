@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { AccountListRow } from '@/components/AccountListRow'
 import { CreateAccountForm } from '@/components/CreateAccountForm'
+import { AddRowButton } from '@/components/ui/AddRowButton'
 import { PLAIN_ICON_BUTTON_CLASS } from '@/components/ui/Button'
 import { DangerConfirm } from '@/components/ui/DangerConfirm'
 import { SEARCH_ICON, X_ICON } from '@/components/ui/icons'
@@ -161,17 +162,14 @@ export const AccountsDialog = ({ open, onOpenChange }: AccountsDialogProps): JSX
               ))
             )}
           </div>
-          <button
-            type="button"
-            data-testid="menu-add-account"
+          <AddRowButton
+            label="Add account"
+            testId="menu-add-account"
             onClick={() => {
               setQuery('')
               setScreen('add')
             }}
-            className="mt-1 flex w-full items-center justify-center gap-2 rounded-sm border border-dashed border-border p-2 font-semibold text-primary transition-colors hover:border-primary/40 hover:bg-primary-soft"
-          >
-            <span aria-hidden="true">+</span> Add account
-          </button>
+          />
         </div>
       )}
     </Sheet>

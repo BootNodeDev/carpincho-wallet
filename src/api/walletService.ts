@@ -1,4 +1,4 @@
-import { loadRuntimeConfigAsync } from '@/config/runtimeConfig'
+import { activeRpcUrl, loadRuntimeConfigAsync } from '@/config/runtimeConfig'
 
 export interface JsonRpcErrorObject {
   code: number
@@ -60,7 +60,7 @@ export interface DarUploadResponse {
 
 const rpcUrl = async (options?: WalletServiceRequestOptions): Promise<string> =>
   options?.rpcUrl?.trim() === undefined || options.rpcUrl.trim() === ''
-    ? (await loadRuntimeConfigAsync()).walletServiceRpcUrl
+    ? activeRpcUrl(await loadRuntimeConfigAsync())
     : options.rpcUrl.trim()
 
 export const walletServiceRequest = async <T>(
@@ -100,6 +100,10 @@ export const walletServiceStatus = async (
 ): Promise<WalletServiceStatusResponse> =>
   await walletServiceRequest<WalletServiceStatusResponse>('status', undefined, options)
 
+// One reading of "Canton is usable": wallet-service answered and reports the network connected.
+export const isCantonConnected = (status: WalletServiceStatusResponse): boolean =>
+  status.connection?.isNetworkConnected === true
+
 // Extracts the active network id and fails when wallet-service cannot provide one.
 export const networkIdFromWalletServiceStatus = (status: WalletServiceStatusResponse): string => {
   const networkId = status.network?.networkId?.trim()
@@ -118,10 +122,7 @@ type AdminRequestOptions = WalletServiceRequestOptions
 
 // Reuses the configured JSON-RPC base so admin utilities follow the same wallet-service target.
 const adminUrl = async (path: string, options?: AdminRequestOptions): Promise<string> => {
-  const base =
-    options?.rpcUrl?.trim() === undefined || options.rpcUrl.trim() === ''
-      ? (await loadRuntimeConfigAsync()).walletServiceRpcUrl
-      : options.rpcUrl.trim()
+  const base = await rpcUrl(options)
   return `${base.replace(/\/rpc\/?$/, '')}${path}`
 }
 
