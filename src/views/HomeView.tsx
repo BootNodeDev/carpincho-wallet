@@ -176,10 +176,13 @@ export const HomeView = (): JSX.Element => {
         />
       </Sheet>
 
-      <ConnectionSettingsSheet
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-      />
+      {/* Mounted on demand: closed, it would still read the config and probe the endpoints. */}
+      {settingsOpen && (
+        <ConnectionSettingsSheet
+          open
+          onOpenChange={setSettingsOpen}
+        />
+      )}
 
       <Sheet
         open={disconnectConfirmOpen}

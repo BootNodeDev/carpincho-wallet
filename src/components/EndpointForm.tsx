@@ -3,8 +3,35 @@ import { GhostButton, PrimaryButton } from '@/components/ui/Button'
 import { ALERT_CIRCLE_ICON, ALERT_TRIANGLE_ICON, SPINNER_ICON } from '@/components/ui/icons'
 import { TextInput } from '@/components/ui/TextInput'
 import type { WalletServiceEndpoint } from '@/config/runtimeConfig'
-import { useWalletServiceTest } from '@/hooks/useWalletServiceTest'
+import { useWalletServiceTest, type WalletServiceTestState } from '@/hooks/useWalletServiceTest'
+import { cn } from '@/utils/cn'
 import { displayNetworkId } from '@/utils/network'
+
+const SUCCESS_DOT = (
+  <span
+    aria-hidden="true"
+    className="block size-2 rounded-full bg-success"
+  />
+)
+
+// Icon, colour and copy per outcome of the Test button; `connected` also renders the network id.
+const RESULT: Record<
+  Exclude<WalletServiceTestState, 'idle'>,
+  (reason?: string) => { mark: JSX.Element; tone: string; text: string }
+> = {
+  testing: () => ({ mark: SPINNER_ICON, tone: 'text-soft', text: 'Testing…' }),
+  connected: () => ({ mark: SUCCESS_DOT, tone: 'text-success', text: 'Reachable' }),
+  'not-connected': (reason) => ({
+    mark: ALERT_TRIANGLE_ICON,
+    tone: 'text-warning',
+    text: `Responded, Canton not connected${reason === undefined ? '' : `: ${reason}`}`,
+  }),
+  unreachable: (reason) => ({
+    mark: ALERT_CIRCLE_ICON,
+    tone: 'text-danger',
+    text: reason ?? "Can't reach wallet-service",
+  }),
+}
 
 interface EndpointFormProps {
   // Omitted when adding a new endpoint.
@@ -31,6 +58,7 @@ export const EndpointForm = ({
   // The result belongs to the URL it was measured against, so an edit hides it again.
   const result = testedUrl === trimmedUrl && state !== 'idle' ? state : undefined
   const network = displayNetworkId(networkId)
+  const shown = result === undefined ? undefined : RESULT[result](reason)
 
   return (
     <form
@@ -76,47 +104,21 @@ export const EndpointForm = ({
           error={result === 'unreachable'}
           aria-errormessage={result === 'unreachable' ? resultId : undefined}
         />
-        {result !== undefined && (
+        {shown !== undefined && (
           <p
             id={resultId}
             role="status"
-            className="mt-2 flex items-center gap-2 px-1 text-[0.82rem] font-semibold"
+            className={cn(
+              'mt-2 flex items-center gap-2 px-1 text-[0.82rem] font-semibold',
+              shown.tone,
+            )}
           >
-            {result === 'testing' && (
-              <>
-                <span className="shrink-0 text-soft [&>svg]:size-4">{SPINNER_ICON}</span>
-                <span className="text-soft">Testing…</span>
-              </>
-            )}
-            {result === 'connected' && (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="size-2 shrink-0 rounded-full bg-success"
-                />
-                <span className="text-success">Reachable</span>
-                {network !== undefined && (
-                  <span className="truncate font-mono text-[0.78rem] font-normal text-muted-foreground">
-                    {network}
-                  </span>
-                )}
-              </>
-            )}
-            {result === 'not-connected' && (
-              <>
-                <span className="shrink-0 text-warning [&>svg]:size-4">{ALERT_TRIANGLE_ICON}</span>
-                <span className="min-w-0 truncate font-normal text-warning">
-                  Responded, Canton not connected{reason === undefined ? '' : `: ${reason}`}
-                </span>
-              </>
-            )}
-            {result === 'unreachable' && (
-              <>
-                <span className="shrink-0 text-danger [&>svg]:size-4">{ALERT_CIRCLE_ICON}</span>
-                <span className="min-w-0 truncate font-normal text-danger">
-                  {reason ?? "Can't reach wallet-service"}
-                </span>
-              </>
+            <span className="shrink-0 [&>svg]:size-4">{shown.mark}</span>
+            <span className="min-w-0 truncate font-normal">{shown.text}</span>
+            {result === 'connected' && network !== undefined && (
+              <span className="truncate font-mono text-[0.78rem] font-normal text-muted-foreground">
+                {network}
+              </span>
             )}
           </p>
         )}

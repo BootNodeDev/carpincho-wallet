@@ -100,6 +100,10 @@ export const walletServiceStatus = async (
 ): Promise<WalletServiceStatusResponse> =>
   await walletServiceRequest<WalletServiceStatusResponse>('status', undefined, options)
 
+// One reading of "Canton is usable": wallet-service answered and reports the network connected.
+export const isCantonConnected = (status: WalletServiceStatusResponse): boolean =>
+  status.connection?.isNetworkConnected === true
+
 // Extracts the active network id and fails when wallet-service cannot provide one.
 export const networkIdFromWalletServiceStatus = (status: WalletServiceStatusResponse): string => {
   const networkId = status.network?.networkId?.trim()

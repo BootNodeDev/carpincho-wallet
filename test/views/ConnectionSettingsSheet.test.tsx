@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { toast } from '@/components/ui/toast'
 import { activeRpcUrl, loadRuntimeConfig, saveRuntimeConfig } from '@/config/runtimeConfig'
+import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import { ConnectionSettingsSheet } from '@/views/ConnectionSettingsSheet'
 
 const originalFetch = globalThis.fetch
@@ -26,10 +27,12 @@ const respond = (connected: boolean): void => {
 
 const openSheet = (): void => {
   render(
-    <ConnectionSettingsSheet
-      open
-      onOpenChange={() => undefined}
-    />,
+    <TestQueryClientProvider>
+      <ConnectionSettingsSheet
+        open
+        onOpenChange={() => undefined}
+      />
+    </TestQueryClientProvider>,
   )
 }
 

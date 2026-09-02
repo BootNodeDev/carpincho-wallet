@@ -67,29 +67,28 @@ export const defaultRuntimeConfig = (): RuntimeConfig =>
   singleEndpointConfig(DEFAULT_RPC_URL, 'Local')
 
 // Falls back to the first entry so a config whose active id went missing still resolves.
-export const activeRpcUrl = (config: RuntimeConfig): string => {
-  const match = config.endpoints.find((endpoint) => endpoint.id === config.activeEndpointId)
-  return (
-    (match ?? (config.endpoints[0] as WalletServiceEndpoint | undefined))?.url ?? DEFAULT_RPC_URL
-  )
-}
+export const activeRpcUrl = (config: RuntimeConfig): string =>
+  (
+    config.endpoints.find((endpoint) => endpoint.id === config.activeEndpointId) ??
+    config.endpoints[0]
+  )?.url ?? DEFAULT_RPC_URL
 
 // Onboarding edits the endpoint in use instead of adding one; its name follows the host.
-export const withActiveEndpointUrl = (config: RuntimeConfig, url: string): RuntimeConfig => ({
-  ...config,
-  endpoints: config.endpoints.map((endpoint) =>
-    endpoint.id !== config.activeEndpointId
-      ? endpoint
-      : {
-          ...endpoint,
-          url,
-          name:
-            endpointNameFromUrl(endpoint.url) === endpointNameFromUrl(url)
-              ? endpoint.name
-              : endpointNameFromUrl(url),
-        },
-  ),
-})
+export const withActiveEndpointUrl = (config: RuntimeConfig, url: string): RuntimeConfig => {
+  const host = endpointNameFromUrl(url)
+  return {
+    ...config,
+    endpoints: config.endpoints.map((endpoint) =>
+      endpoint.id === config.activeEndpointId
+        ? {
+            ...endpoint,
+            url,
+            name: endpointNameFromUrl(endpoint.url) === host ? endpoint.name : host,
+          }
+        : endpoint,
+    ),
+  }
+}
 
 const sanitizeEndpoint = (raw: unknown): WalletServiceEndpoint | undefined => {
   const endpoint = raw as Partial<WalletServiceEndpoint> | null
@@ -128,13 +127,13 @@ export const loadRuntimeConfig = (): RuntimeConfig => {
     if (storage === undefined) {
       return defaultRuntimeConfig()
     }
-    const stored = storage.getItem(STORAGE_KEY)
-    const legacy = stored === null ? storage.getItem(LEGACY_STORAGE_KEY) : null
-    if (stored === null && legacy === null) {
+    const current = storage.getItem(STORAGE_KEY)
+    const raw = current ?? storage.getItem(LEGACY_STORAGE_KEY)
+    if (raw === null) {
       return defaultRuntimeConfig()
     }
-    const sanitized = sanitizeRuntimeConfig(JSON.parse(stored ?? (legacy as string)) as unknown)
-    if (stored === null) {
+    const sanitized = sanitizeRuntimeConfig(JSON.parse(raw) as unknown)
+    if (current === null) {
       // Freeze the migrated list under the new key so endpoint ids stay stable across loads.
       storage.setItem(STORAGE_KEY, JSON.stringify(sanitized))
       storage.removeItem(LEGACY_STORAGE_KEY)

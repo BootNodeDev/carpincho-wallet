@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { type WalletServiceStatusResponse, walletServiceStatus } from '@/api/walletService'
+import {
+  isCantonConnected,
+  type WalletServiceStatusResponse,
+  walletServiceStatus,
+} from '@/api/walletService'
 import { activeRpcUrl } from '@/config/runtimeConfig'
 import { useRuntimeConfig } from '@/config/useRuntimeConfig'
 
@@ -17,7 +21,7 @@ const DEFAULT_POLL_MS = 5000
 
 // Converts the wallet-service status payload into the footer's binary Canton state.
 const statusFromResponse = (status: WalletServiceStatusResponse): WalletServiceStatus => ({
-  connected: status.connection?.isNetworkConnected === true,
+  connected: isCantonConnected(status),
   ...(status.network?.networkId === undefined ? {} : { networkId: status.network.networkId }),
   ...(status.connection?.networkReason === undefined
     ? {}

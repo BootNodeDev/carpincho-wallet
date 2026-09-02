@@ -24,7 +24,7 @@ export const ConnectionSettingsSheet = ({
   const { config, saveConfig } = useRuntimeConfig()
   const [editing, setEditing] = useState<WalletServiceEndpoint | 'new' | null>(null)
   const [removeTarget, setRemoveTarget] = useState<WalletServiceEndpoint | null>(null)
-  const reachability = useEndpointReachability(config.endpoints, open)
+  const reachability = useEndpointReachability(config.endpoints)
 
   const handleOpenChange = (next: boolean): void => {
     onOpenChange(next)
@@ -47,19 +47,13 @@ export const ConnectionSettingsSheet = ({
     if (target === null) {
       return
     }
-    saveConfig(
+    const endpoints =
       target === 'new'
-        ? {
-            ...config,
-            endpoints: [...config.endpoints, { id: newEndpointId(), name, url }],
-          }
-        : {
-            ...config,
-            endpoints: config.endpoints.map((endpoint) =>
-              endpoint.id === target.id ? { ...endpoint, name, url } : endpoint,
-            ),
-          },
-    )
+        ? [...config.endpoints, { id: newEndpointId(), name, url }]
+        : config.endpoints.map((endpoint) =>
+            endpoint.id === target.id ? { ...endpoint, name, url } : endpoint,
+          )
+    saveConfig({ ...config, endpoints })
     setEditing(null)
     toast.success(target === 'new' ? 'Endpoint added' : 'Endpoint saved')
   }
@@ -69,74 +63,79 @@ export const ConnectionSettingsSheet = ({
       return
     }
     const endpoints = config.endpoints.filter((endpoint) => endpoint.id !== removeTarget.id)
-    // Removing the endpoint in use falls back to the first one left.
-    saveConfig({ ...config, endpoints })
+    const active = endpoints.find((endpoint) => endpoint.id === config.activeEndpointId)
+    // Removing the endpoint in use hands over to the first one left.
+    saveConfig({ endpoints, activeEndpointId: (active ?? endpoints[0]).id })
     setRemoveTarget(null)
     toast.success('Endpoint removed')
   }
 
-  const title = (): string => {
-    if (removeTarget !== null) {
-      return `Remove ${removeTarget.name}?`
-    }
-    return editing === null ? 'Connection' : editing === 'new' ? 'Add endpoint' : editing.name
-  }
-
   return (
-    <Sheet
-      open={open}
-      onOpenChange={handleOpenChange}
-      testId="connection-settings-sheet"
-      // The confirm is a centered modal; the list and the forms stay a bottom sheet.
-      side={removeTarget === null ? 'bottom' : 'center'}
-      title={title()}
-      description={
-        removeTarget !== null
-          ? 'Confirm removing this wallet-service endpoint.'
-          : editing === null
+    <>
+      <Sheet
+        // The confirm takes over the screen, so this one steps aside while it is up.
+        open={open && removeTarget === null}
+        onOpenChange={handleOpenChange}
+        testId="connection-settings-sheet"
+        title={editing === null ? 'Connection' : editing === 'new' ? 'Add endpoint' : editing.name}
+        description={
+          editing === null
             ? 'Pick, add, edit or remove wallet-service endpoints.'
             : 'Name the endpoint and test its RPC URL.'
-      }
-      onBack={editing === null || removeTarget !== null ? undefined : () => setEditing(null)}
-      onClose={removeTarget === null ? undefined : () => setRemoveTarget(null)}
-    >
-      {removeTarget !== null ? (
+        }
+        onBack={editing === null ? undefined : () => setEditing(null)}
+      >
+        {editing === null ? (
+          <div className="flex flex-col gap-2">
+            <SectionLabel>Wallet-service endpoints</SectionLabel>
+            {config.endpoints.map((endpoint) => (
+              <EndpointListRow
+                key={endpoint.id}
+                endpoint={endpoint}
+                active={endpoint.id === config.activeEndpointId}
+                reachability={reachability[endpoint.id] ?? 'checking'}
+                canRemove={config.endpoints.length > 1}
+                onSelect={() => onSelect(endpoint)}
+                onRequestEdit={() => setEditing(endpoint)}
+                onRequestRemove={() => setRemoveTarget(endpoint)}
+              />
+            ))}
+            <AddRowButton
+              label="Add endpoint"
+              testId="endpoint-add"
+              onClick={() => setEditing('new')}
+            />
+          </div>
+        ) : (
+          <EndpointForm
+            endpoint={editing === 'new' ? undefined : editing}
+            submitLabel="Save"
+            onSubmit={onSubmit}
+          />
+        )}
+      </Sheet>
+
+      <Sheet
+        open={removeTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) {
+            setRemoveTarget(null)
+          }
+        }}
+        testId="endpoint-remove-sheet"
+        side="center"
+        title={`Remove ${removeTarget?.name ?? 'endpoint'}?`}
+        description="Confirm removing this wallet-service endpoint."
+      >
         <DangerConfirm
           testId="remove-endpoint"
-          identifier={removeTarget.url}
+          identifier={removeTarget?.url}
           message="This endpoint will no longer be available to pick."
           confirmLabel="Remove endpoint"
           confirmTestId="confirm-remove-endpoint"
           onConfirm={onConfirmRemove}
         />
-      ) : editing === null ? (
-        <div className="flex flex-col gap-2">
-          <SectionLabel>Wallet-service endpoints</SectionLabel>
-          {config.endpoints.map((endpoint) => (
-            <EndpointListRow
-              key={endpoint.id}
-              endpoint={endpoint}
-              active={endpoint.id === config.activeEndpointId}
-              reachability={reachability[endpoint.id] ?? 'checking'}
-              canRemove={config.endpoints.length > 1}
-              onSelect={() => onSelect(endpoint)}
-              onRequestEdit={() => setEditing(endpoint)}
-              onRequestRemove={() => setRemoveTarget(endpoint)}
-            />
-          ))}
-          <AddRowButton
-            label="Add endpoint"
-            testId="endpoint-add"
-            onClick={() => setEditing('new')}
-          />
-        </div>
-      ) : (
-        <EndpointForm
-          endpoint={editing === 'new' ? undefined : editing}
-          submitLabel="Save"
-          onSubmit={onSubmit}
-        />
-      )}
-    </Sheet>
+      </Sheet>
+    </>
   )
 }

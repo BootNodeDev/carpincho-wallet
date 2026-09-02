@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { walletServiceStatus } from '@/api/walletService'
+import { isCantonConnected, walletServiceStatus } from '@/api/walletService'
 
 // `not-connected` is wallet-service answering while Canton is not connected: the URL is right.
 export type WalletServiceTestState =
@@ -35,7 +35,7 @@ export const useWalletServiceTest = (): WalletServiceTest => {
       if (ticket !== seq.current) {
         return
       }
-      if (status.connection?.isNetworkConnected === true) {
+      if (isCantonConnected(status)) {
         setNetworkId(status.network?.networkId)
         setReason(undefined)
         setState('connected')
