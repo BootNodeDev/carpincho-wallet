@@ -23,8 +23,19 @@ const queried: Array<string | string[] | undefined> = []
 const createdWindows: Array<{ url: string; type: string; focused: boolean }> = []
 const focusedWindows: number[] = []
 const removedWindows: number[] = []
+// How long `windows.create` takes to answer, so tests can put work inside that gap.
+const windowStub = { createDelayMs: 0 }
 let listener: Listener | undefined
 let windowRemoved: WindowRemovedListener | undefined
+
+// Each group of tests counts its own window calls; background.ts state carries over, so
+// every group has to leave the approval window closed.
+const resetWindowCalls = (): void => {
+  createdWindows.length = 0
+  focusedWindows.length = 0
+  removedWindows.length = 0
+  windowStub.createDelayMs = 0
+}
 
 const waitFor = async (done: () => boolean): Promise<void> => {
   for (let attempt = 0; attempt < 200 && !done(); attempt += 1) {
@@ -60,6 +71,7 @@ before(async () => {
       windows: {
         create: async (details: { url: string; type: string; focused: boolean }) => {
           createdWindows.push(details)
+          await new Promise((resolve) => setTimeout(resolve, windowStub.createDelayMs))
           return { id: APPROVAL_WINDOW_ID }
         },
         update: async (windowId: number) => {
@@ -148,10 +160,13 @@ describe('background: opening the wallet for a queued request', () => {
   const first: JsonRpcResponse[] = []
   const second: JsonRpcResponse[] = []
 
+  before(resetWindowCalls)
+
   it('opens the wallet in its own window, with no toolbar click', async () => {
     queueConnect(1, 'http://localhost:9000', first)
-    await waitFor(() => createdWindows.length === 1)
+    await waitFor(() => createdWindows.length >= 1)
 
+    assert.equal(createdWindows.length, 1)
     assert.equal(createdWindows[0].url, 'chrome-extension://test/index.html')
     assert.equal(createdWindows[0].type, 'popup')
     assert.equal(createdWindows[0].focused, true)
@@ -160,10 +175,18 @@ describe('background: opening the wallet for a queued request', () => {
 
   it('focuses that window for a second request instead of opening another', async () => {
     queueConnect(2, 'http://localhost:9001', second)
-    await waitFor(() => focusedWindows.length === 1)
+    await waitFor(() => focusedWindows.length >= 1)
 
     assert.equal(createdWindows.length, 1)
     assert.deepEqual(focusedWindows, [APPROVAL_WINDOW_ID])
+  })
+
+  it('leaves pending requests alone when some other browser window closes', () => {
+    assert.ok(windowRemoved)
+    windowRemoved(APPROVAL_WINDOW_ID + 1)
+
+    assert.deepEqual(first, [])
+    assert.deepEqual(second, [])
   })
 
   it('answers every still-pending request as user-rejected when the window closes', () => {
@@ -177,25 +200,72 @@ describe('background: opening the wallet for a queued request', () => {
   })
 })
 
+const answerConnect = (requestId: string): void => {
+  assert.ok(listener)
+  listener(
+    {
+      type: 'CARPINCHO_PROVIDER_RESPONSE',
+      requestId,
+      response: { jsonrpc: '2.0', id: Number(requestId), result: { isConnected: true } },
+    },
+    {},
+    () => undefined,
+  )
+}
+
 describe('background: answering the last request', () => {
+  before(resetWindowCalls)
+
   it('closes the window the wallet opened', async () => {
     const answers: JsonRpcResponse[] = []
     queueConnect(3, 'http://localhost:9002', answers)
-    await waitFor(() => createdWindows.length === 2)
+    await waitFor(() => createdWindows.length >= 1)
+    answerConnect('3')
+    await waitFor(() => removedWindows.length >= 1)
 
-    assert.ok(listener)
-    listener(
-      {
-        type: 'CARPINCHO_PROVIDER_RESPONSE',
-        requestId: '3',
-        response: { jsonrpc: '2.0', id: 3, result: { isConnected: true } },
-      },
-      {},
-      () => undefined,
-    )
-    await waitFor(() => removedWindows.length === 1)
-
+    assert.equal(createdWindows.length, 1)
     assert.deepEqual(removedWindows, [APPROVAL_WINDOW_ID])
     assert.deepEqual(answers[0].result, { isConnected: true })
+  })
+})
+
+describe('background: two requests landing while the window is still opening', () => {
+  before(() => {
+    resetWindowCalls()
+    windowStub.createDelayMs = 20
+  })
+
+  it('opens one window and focuses it, never two', async () => {
+    const fourth: JsonRpcResponse[] = []
+    const fifth: JsonRpcResponse[] = []
+    queueConnect(4, 'http://localhost:9003', fourth)
+    queueConnect(5, 'http://localhost:9004', fifth)
+    await waitFor(() => focusedWindows.length >= 1)
+
+    assert.equal(createdWindows.length, 1)
+    assert.deepEqual(focusedWindows, [APPROVAL_WINDOW_ID])
+
+    // Leave the window closed for the next group
+    answerConnect('4')
+    answerConnect('5')
+    await waitFor(() => removedWindows.length >= 1)
+  })
+})
+
+describe('background: a request answered while the window is still opening', () => {
+  before(() => {
+    resetWindowCalls()
+    windowStub.createDelayMs = 40
+  })
+
+  it('closes the window it opened instead of popping it up over nothing', async () => {
+    const answers: JsonRpcResponse[] = []
+    queueConnect(6, 'http://localhost:9005', answers)
+    await waitFor(() => createdWindows.length >= 1)
+    answerConnect('6')
+    await waitFor(() => removedWindows.length >= 1)
+
+    assert.equal(createdWindows.length, 1)
+    assert.deepEqual(removedWindows, [APPROVAL_WINDOW_ID])
   })
 })

@@ -202,38 +202,64 @@ const updateActionBadge = async (): Promise<void> => {
 const APPROVAL_WINDOW_WIDTH = 420
 const APPROVAL_WINDOW_HEIGHT = 640
 
-const approvalWindow: { id?: number; opening?: Promise<void> } = {}
+// `opening` marks a create still in flight; `generation` counts how many windows have been
+// given up on, so a create can tell whether the one it is about to hand over is still wanted.
+const approvalWindow: { id?: number; opening?: Promise<void>; generation: number } = {
+  generation: 0,
+}
+
+// Stops tracking the current window. Bumping the generation also cancels a create still in
+// flight, and clearing the id keeps the `onRemoved` listener from reading a close the wallet
+// asked for as the user dismissing the prompt.
+const forgetApprovalWindow = (): void => {
+  approvalWindow.id = undefined
+  approvalWindow.generation += 1
+}
 
 const createApprovalWindow = async (): Promise<void> => {
-  const created = await chromeApi?.windows?.create({
-    url: chromeApi?.runtime?.getURL('index.html') ?? 'index.html',
-    type: 'popup',
-    focused: true,
-    width: APPROVAL_WINDOW_WIDTH,
-    height: APPROVAL_WINDOW_HEIGHT,
-  })
-  approvalWindow.id = created?.id
+  const { generation } = approvalWindow
+  try {
+    const created = await chromeApi?.windows?.create({
+      url: chromeApi?.runtime?.getURL('index.html') ?? 'index.html',
+      type: 'popup',
+      focused: true,
+      width: APPROVAL_WINDOW_WIDTH,
+      height: APPROVAL_WINDOW_HEIGHT,
+    })
+    if (created?.id === undefined) {
+      return
+    }
+    // Every request this window was for got answered while the create was still in flight
+    // (the toolbar popup was already open, say). Close it instead of popping it up over nothing.
+    if (approvalWindow.generation !== generation) {
+      await chromeApi?.windows?.remove(created.id)
+      return
+    }
+    approvalWindow.id = created.id
+  } finally {
+    approvalWindow.opening = undefined
+  }
 }
 
 const openApprovalWindow = async (): Promise<void> => {
-  await approvalWindow.opening?.catch(() => undefined)
-  if (approvalWindow.id !== undefined) {
-    await chromeApi?.windows?.update(approvalWindow.id, { focused: true })
+  // Claimed synchronously: two requests landing in the same tick must not each open a window.
+  if (approvalWindow.opening === undefined && approvalWindow.id === undefined) {
+    approvalWindow.opening = createApprovalWindow()
+    await approvalWindow.opening
     return
   }
-  approvalWindow.opening = createApprovalWindow()
   await approvalWindow.opening
+  if (approvalWindow.id !== undefined) {
+    await chromeApi?.windows?.update(approvalWindow.id, { focused: true })
+  }
 }
 
-// Forgets the window before removing it so the `onRemoved` listener does not read this
-// deliberate close as the user dismissing the prompt.
 const closeApprovalWindow = async (): Promise<void> => {
   const { id } = approvalWindow
+  forgetApprovalWindow()
   if (id === undefined) {
     return
   }
-  approvalWindow.id = undefined
-  approvalWindow.opening = undefined
   await chromeApi?.windows?.remove(id)
 }
 
@@ -263,7 +289,11 @@ const rejectPendingRequests = (): void => {
   const abandoned = [...pendingRequests.values()]
   pendingRequests.clear()
   for (const entry of abandoned) {
-    entry.sendResponse(jsonRpcError(entry.pending.request.id, 4001, 'user rejected'))
+    try {
+      entry.sendResponse(jsonRpcError(entry.pending.request.id, 4001, 'user rejected'))
+    } catch {
+      // A dApp whose port is already gone cannot be told; the rest still have to be.
+    }
   }
   void updateActionBadge().catch(() => undefined)
 }
@@ -304,8 +334,7 @@ chromeApi?.windows?.onRemoved.addListener((windowId) => {
   if (windowId !== approvalWindow.id) {
     return
   }
-  approvalWindow.id = undefined
-  approvalWindow.opening = undefined
+  forgetApprovalWindow()
   rejectPendingRequests()
 })
 
