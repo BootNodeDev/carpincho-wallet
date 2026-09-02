@@ -60,6 +60,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # test/extensionManifest.test.ts asserts on dist-extension/, so the output has to exist.
+      - run: pnpm build:extension
       - run: pnpm test
 
   commitlint:
