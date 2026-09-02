@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { GhostButton, PrimaryButton } from '@/components/ui/Button'
-import { ALERT_CIRCLE_ICON, SPINNER_ICON } from '@/components/ui/icons'
+import { ALERT_CIRCLE_ICON, ALERT_TRIANGLE_ICON, SPINNER_ICON } from '@/components/ui/icons'
 import { TextInput } from '@/components/ui/TextInput'
 import type { WalletServiceEndpoint } from '@/config/runtimeConfig'
 import { useWalletServiceTest } from '@/hooks/useWalletServiceTest'
@@ -23,6 +23,7 @@ export const EndpointForm = ({
   const [url, setUrl] = useState(endpoint?.url ?? '')
   const nameId = useId()
   const urlId = useId()
+  const resultId = useId()
   const { state, networkId, reason, testedUrl, test } = useWalletServiceTest()
 
   const trimmedName = name.trim()
@@ -73,9 +74,11 @@ export const EndpointForm = ({
           onChange={(e) => setUrl(e.target.value)}
           placeholder="http://localhost:3010/rpc"
           error={result === 'unreachable'}
+          aria-errormessage={result === 'unreachable' ? resultId : undefined}
         />
         {result !== undefined && (
           <p
+            id={resultId}
             role="status"
             className="mt-2 flex items-center gap-2 px-1 text-[0.82rem] font-semibold"
           >
@@ -97,6 +100,14 @@ export const EndpointForm = ({
                     {network}
                   </span>
                 )}
+              </>
+            )}
+            {result === 'not-connected' && (
+              <>
+                <span className="shrink-0 text-warning [&>svg]:size-4">{ALERT_TRIANGLE_ICON}</span>
+                <span className="min-w-0 truncate font-normal text-warning">
+                  Responded, Canton not connected{reason === undefined ? '' : `: ${reason}`}
+                </span>
               </>
             )}
             {result === 'unreachable' && (

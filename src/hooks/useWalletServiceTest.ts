@@ -1,7 +1,13 @@
 import { useCallback, useRef, useState } from 'react'
 import { walletServiceStatus } from '@/api/walletService'
 
-export type WalletServiceTestState = 'idle' | 'testing' | 'connected' | 'unreachable'
+// `not-connected` is wallet-service answering while Canton is not connected: the URL is right.
+export type WalletServiceTestState =
+  | 'idle'
+  | 'testing'
+  | 'connected'
+  | 'not-connected'
+  | 'unreachable'
 
 export interface WalletServiceTest {
   state: WalletServiceTestState
@@ -36,7 +42,7 @@ export const useWalletServiceTest = (): WalletServiceTest => {
       } else {
         setNetworkId(undefined)
         setReason(status.connection?.networkReason ?? 'Canton network not connected')
-        setState('unreachable')
+        setState('not-connected')
       }
     } catch (err) {
       if (ticket !== seq.current) {

@@ -4,8 +4,9 @@ import type { WalletServiceEndpoint } from '@/config/runtimeConfig'
 import type { Reachability } from '@/hooks/useEndpointReachability'
 import { cn } from '@/utils/cn'
 
+// A probe in flight pulses, so "still checking" never looks like "down".
 const DOT_CLASS: Record<Reachability, string> = {
-  checking: 'bg-muted-foreground/40',
+  checking: 'bg-muted-foreground/40 animate-soft-pulse',
   reachable: 'bg-success',
   unreachable: 'bg-muted-foreground/40',
 }
@@ -72,6 +73,7 @@ export const EndpointListRow = ({
     <button
       type="button"
       data-testid="endpoint-edit"
+      data-endpoint-name={endpoint.name}
       onClick={onRequestEdit}
       aria-label={`Edit ${endpoint.name}`}
       className={cn(PLAIN_ICON_BUTTON_CLASS, 'relative z-10 size-8 shrink-0')}
@@ -82,6 +84,7 @@ export const EndpointListRow = ({
       <button
         type="button"
         data-testid="endpoint-remove"
+        data-endpoint-name={endpoint.name}
         onClick={onRequestRemove}
         aria-label={`Remove ${endpoint.name}`}
         className={cn(

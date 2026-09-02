@@ -26,13 +26,13 @@ describe('useWalletServiceTest', () => {
     assert.equal(result.current.testedUrl, 'http://host/rpc')
   })
 
-  it('maps a responded-but-not-connected status to unreachable with the reason', async () => {
+  it('maps a responded-but-not-connected status to not-connected with the reason', async () => {
     respond({ connection: { isNetworkConnected: false, networkReason: 'syncing' } })
     const { result } = renderHook(() => useWalletServiceTest())
     await act(async () => {
       await result.current.test('http://host/rpc')
     })
-    assert.equal(result.current.state, 'unreachable')
+    assert.equal(result.current.state, 'not-connected')
     assert.equal(result.current.reason, 'syncing')
     assert.equal(result.current.testedUrl, 'http://host/rpc')
   })

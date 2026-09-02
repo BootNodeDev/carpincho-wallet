@@ -37,9 +37,9 @@ export const ConfigureRpcStep = ({ onConfirmed }: ConfigureRpcStepProps): JSX.El
     return () => window.clearTimeout(id)
   }, [url, test])
 
-  // Auto-retry while unreachable so the step unblocks once wallet-service comes up.
+  // Auto-retry until Canton answers so the step unblocks once wallet-service comes up.
   useEffect(() => {
-    if (state !== 'unreachable') {
+    if (state !== 'unreachable' && state !== 'not-connected') {
       return undefined
     }
     const id = window.setInterval(() => {
@@ -51,7 +51,11 @@ export const ConfigureRpcStep = ({ onConfirmed }: ConfigureRpcStepProps): JSX.El
   const canContinue = state === 'connected' && testedUrl === url
   const network = displayNetworkId(networkId)
   const tone =
-    state === 'connected' ? 'connected' : state === 'unreachable' ? 'unreachable' : 'pending'
+    state === 'connected'
+      ? 'connected'
+      : state === 'idle' || state === 'testing'
+        ? 'pending'
+        : 'unreachable'
 
   const onContinue = (): void => {
     saveConfig(withActiveEndpointUrl(config, url))

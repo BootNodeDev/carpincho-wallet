@@ -35,6 +35,15 @@ const openSheet = (): void => {
 
 const rows = (): HTMLElement[] => screen.getAllByTestId('endpoint-item')
 
+// Rows share one testid, so the endpoint name discriminates them.
+const rowButton = (testId: string, name: string): HTMLElement => {
+  const match = screen
+    .getAllByTestId(testId)
+    .find((element) => element.getAttribute('data-endpoint-name') === name)
+  assert.ok(match, `no ${testId} for ${name}`)
+  return match
+}
+
 describe('ConnectionSettingsSheet', () => {
   afterEach(() => {
     cleanup()
@@ -61,7 +70,7 @@ describe('ConnectionSettingsSheet', () => {
     saveRuntimeConfig({ endpoints: [LOCAL, DEVNET], activeEndpointId: 'local' })
     openSheet()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Use Devnet' }))
+    await userEvent.click(rowButton('endpoint-item', 'Devnet'))
 
     assert.equal(activeRpcUrl(loadRuntimeConfig()), 'http://devnet.example/rpc')
   })
@@ -90,7 +99,7 @@ describe('ConnectionSettingsSheet', () => {
     saveRuntimeConfig({ endpoints: [LOCAL, DEVNET], activeEndpointId: 'local' })
     openSheet()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Edit Devnet' }))
+    await userEvent.click(rowButton('endpoint-edit', 'Devnet'))
     const name = screen.getByTestId('endpoint-name-input')
     await userEvent.clear(name)
     await userEvent.type(name, 'Dev')
@@ -102,15 +111,33 @@ describe('ConnectionSettingsSheet', () => {
     )
   })
 
-  it('reports an unreachable URL from the edit form Test button', async () => {
+  it('separates a service that answers while Canton is down from a bad URL', async () => {
     respond(false)
     saveRuntimeConfig({ endpoints: [LOCAL], activeEndpointId: 'local' })
     openSheet()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Edit Local' }))
+    await userEvent.click(rowButton('endpoint-edit', 'Local'))
     await userEvent.click(screen.getByTestId('endpoint-test'))
 
-    await waitFor(() => assert.ok(screen.getByText('not connected')))
+    // The URL is right, so the field keeps its normal state and the reason is a warning.
+    await waitFor(() => assert.ok(screen.getByText(/Canton not connected/)))
+    assert.equal(screen.getByTestId('endpoint-url-input').getAttribute('aria-invalid'), null)
+  })
+
+  it('marks the URL field invalid when the endpoint cannot be reached', async () => {
+    globalThis.fetch = (async () => {
+      throw new Error('Failed to fetch')
+    }) as typeof globalThis.fetch
+    saveRuntimeConfig({ endpoints: [LOCAL], activeEndpointId: 'local' })
+    openSheet()
+
+    await userEvent.click(rowButton('endpoint-edit', 'Local'))
+    await userEvent.click(screen.getByTestId('endpoint-test'))
+
+    await waitFor(() => assert.ok(screen.getByText('Failed to fetch')))
+    const input = screen.getByTestId('endpoint-url-input')
+    assert.equal(input.getAttribute('aria-invalid'), 'true')
+    assert.ok(input.getAttribute('aria-errormessage'))
   })
 
   it('removes an endpoint after the confirmation', async () => {
@@ -118,7 +145,7 @@ describe('ConnectionSettingsSheet', () => {
     saveRuntimeConfig({ endpoints: [LOCAL, DEVNET], activeEndpointId: 'devnet' })
     openSheet()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove Devnet' }))
+    await userEvent.click(rowButton('endpoint-remove', 'Devnet'))
     // The confirmation echoes the URL of the endpoint being removed.
     assert.ok(within(screen.getByTestId('remove-endpoint')).getByText('http://devnet.example/rpc'))
     await userEvent.click(screen.getByTestId('confirm-remove-endpoint'))

@@ -240,8 +240,9 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     await persistWalletSnapshot(null).catch(() => undefined)
     await wipeWalletConnectStorage().catch(() => undefined)
     await clearDirectConnectedOrigins().catch(() => undefined)
-    await clearMirroredRuntimeConfig().catch(() => undefined)
     wipeAllPersistedData()
+    // After the localStorage wipe: a config read during the await would otherwise re-mirror it.
+    await clearMirroredRuntimeConfig().catch(() => undefined)
     // Reload re-inits every provider from empty storage and is the primary reset mechanism,
     // but reset the React state too so the UI is consistent if a reload is ever a no-op.
     setVaultExists(false)

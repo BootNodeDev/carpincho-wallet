@@ -4,14 +4,22 @@ import type { WalletServiceEndpoint } from '@/config/runtimeConfig'
 
 export type Reachability = 'checking' | 'reachable' | 'unreachable'
 
-// Probes every saved endpoint once per list mount so each row can show a state dot. The endpoints
-// array identity only changes when the stored config does, so a save re-probes and nothing else.
+// Probes every saved endpoint so each row can show a state dot. Only the ids and URLs drive a new
+// round of probes: renaming an endpoint or switching which one is in use leaves the dots alone.
 export const useEndpointReachability = (
   endpoints: WalletServiceEndpoint[],
+  enabled: boolean,
 ): Record<string, Reachability> => {
   const [state, setState] = useState<Record<string, Reachability>>({})
+  const targets = enabled
+    ? endpoints.map((endpoint) => `${endpoint.id} ${endpoint.url}`).join('\n')
+    : ''
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `targets` fingerprints what the probes depend on; `endpoints` is a fresh array after every save and would re-probe for nothing.
   useEffect(() => {
+    if (targets === '') {
+      return undefined
+    }
     let cancelled = false
     const mark = (id: string, value: Reachability): void => {
       if (!cancelled) {
@@ -32,7 +40,7 @@ export const useEndpointReachability = (
     return () => {
       cancelled = true
     }
-  }, [endpoints])
+  }, [targets])
 
   return state
 }
