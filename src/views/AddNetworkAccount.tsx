@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ConnectionFooter } from '@/components/ConnectionFooter'
 import { CreateAccountForm } from '@/components/CreateAccountForm'
 import { Card } from '@/components/ui/Card'
-import { toast } from '@/components/ui/toast'
 import { WelcomeHero } from '@/components/WelcomeHero'
 import { useExtensionDappConnection } from '@/extension/dappConnection'
 import { isExtensionRuntime } from '@/extension/runtimeClient'
@@ -25,13 +24,6 @@ export const AddNetworkAccount = (): JSX.Element => {
     sessions: NO_SESSIONS,
   })
 
-  // Why the wallet landed here is feedback, not part of the form. Re-announced per network so
-  // switching from this screen to another empty one says so again.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
-  useEffect(() => {
-    toast.info('No account on this network, please create one to proceed.')
-  }, [walletService.networkId])
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -43,6 +35,12 @@ export const AddNetworkAccount = (): JSX.Element => {
             would import nothing here — every entry is a party-and-network duplicate. Restore
             stays in the drawer, and in first-run onboarding where the vault is empty. */}
         <Card>
+          <p
+            data-testid="no-account-for-network"
+            className="text-soft mb-5 text-[1rem] leading-relaxed"
+          >
+            No account on this network, please create one to proceed.
+          </p>
           <CreateAccountForm />
         </Card>
       </div>

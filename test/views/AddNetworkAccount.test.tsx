@@ -58,15 +58,19 @@ describe('AddNetworkAccount', () => {
     globalThis.fetch = originalFetch
   })
 
-  it('asks for an account on this network, as a toast rather than in the form', () => {
+  it('asks for an account on this network, in the card rather than as a toast', () => {
     renderView({ offNetworkCount: 2 })
     assert.ok(screen.getByTestId('add-account-hint-input'))
+    assert.ok(
+      /no account on this network/i.test(
+        screen.getByTestId('no-account-for-network').textContent ?? '',
+      ),
+    )
+    // The screen itself says it, so nothing transient does.
+    assert.equal(getToastEntries().length, 0)
     // No restore tab: the vault already holds accounts, so its own backup would import
     // nothing here. Restore lives in the drawer and in first-run onboarding.
     assert.equal(screen.queryByTestId('onboarding-tab-restore'), null)
-    const entries = getToastEntries()
-    assert.equal(entries[0]?.variant, 'info')
-    assert.equal(entries[0]?.message, 'No account on this network, please create one to proceed.')
   })
 
   it('keeps the footer, so the endpoint list is the way back to a network with an account', async () => {
