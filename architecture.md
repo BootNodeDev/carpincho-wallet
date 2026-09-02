@@ -14,7 +14,7 @@
 | Wallet protocol | Injected CIP-0103 provider + optional WalletConnect Sign Client 2.x | Browser extension provider events by default; Reown relay only for WalletConnect fallback |
 | Cryptography | @noble/ed25519 3.x, @noble/hashes 1.x | Ed25519 signing; PBKDF2 + AES-GCM vault |
 | Data fetching | @tanstack/react-query 5.x | Polls CIP-56 token holdings, pending transfers, and Amulet preapproval status (5 s); imperative refetch after sends. Single `QueryClient` mounted in `App.tsx` |
-| UI primitives | React 18 + Radix UI | `@radix-ui/react-{collapsible,dialog,tabs,toast,tooltip}` for modals/tabs/toasts/tooltips; local wrappers (Button family, TextInput, PasswordInput, Alert, Card, AccountAvatar, PendingActionCard, Sheet, Tabs, OptionList, Stepper, DangerConfirm, MenuRow, DetailRow, FileDropInput, Collapsible, Copyable, CopyableLabel, JsonView, ToastProvider, Tooltip) for static visuals and Radix re-skins; shared icon SVG literals live in `src/components/ui/icons.tsx`; `Sheet` is the shared Radix Dialog scaffold for sheet-style flows (overlay, title, close button) and takes `side: 'bottom' | 'right' | 'center'` (default `'bottom'`; right opens as a 400px-wide top-aligned drawer clamped by `100vw`; center renders a centered modal dialog); `ToastProvider` and `TooltipProvider` are both mounted once in `App.tsx`; `TextInput` and `PasswordInput` accept `error?: boolean` which applies a danger border, a persistent focus ring, and `aria-invalid`; `Button.tsx` exports `GHOST_BUTTON_CLASS` / `ICON_BUTTON_CLASS` for ad-hoc buttons (e.g. `PasswordInput`'s show/hide button) |
+| UI primitives | React 18 + Radix UI | `@radix-ui/react-{avatar,collapsible,dialog,select,switch,tabs,toast,tooltip}` for avatars/modals/dropdowns/toggles/tabs/toasts/tooltips; local wrappers (Button family, TextInput, PasswordInput, Alert, Badge, Card, AccountAvatar, PendingActionCard, LoadingState, SectionLabel, Sheet, Tabs, Switch, Select, OptionList, Stepper, DangerConfirm, MenuRow, DetailRow, FileDropInput, Collapsible, Copyable, CopyableLabel, JsonView, ToastProvider, Tooltip) for static visuals and Radix re-skins; shared icon SVG literals live in `src/components/ui/icons.tsx`; `Sheet` is the shared Radix Dialog scaffold for sheet-style flows (overlay, title, close button) and takes `side: 'bottom' | 'right' | 'center'` (default `'bottom'`; right opens as a 400px-wide top-aligned drawer clamped by `100vw`; center renders a centered modal dialog); `ToastProvider` and `TooltipProvider` are both mounted once in `App.tsx`; `TextInput` and `PasswordInput` accept `error?: boolean` which applies a danger border, a persistent focus ring, and `aria-invalid`; `Button.tsx` exports `GHOST_BUTTON_CLASS` / `ICON_BUTTON_CLASS` for ad-hoc buttons (e.g. `PasswordInput`'s show/hide button) |
 | Styling | Tailwind CSS v4 (`@tailwindcss/vite`) | Utility classes inline in JSX; `src/index.css` declares CSS-variable tokens on `:root` / `[data-theme="dark"]` and exposes them to Tailwind through `@theme inline`; `@layer base` holds global resets; Radix `data-[state=...]` and `data-[highlighted]` attrs drive interactive variants |
 | Fonts | `@fontsource-variable/manrope`, `@fontsource-variable/jetbrains-mono` | Self-hosted variable fonts so the extension popup works offline. Manrope is the whole UI: `font-sans` (UI chrome, body, labels, buttons) and `font-display` (hero wordmarks, view headings, section markers — heavier weight for hierarchy). JetBrains Mono is `font-mono` (party IDs, hashes, RPC URLs, JSON payloads) |
 | Theming | Light / dark / system selector in the drawer menu | `src/theme/ThemeProvider.tsx` owns a persisted `mode` (`light` \| `dark` \| `system`, default `system`), resolves `system` against `prefers-color-scheme` (re-resolving on media changes while in `system`), and writes the resolved `data-theme` on `<html>` after mount; the selector lives in the drawer under Theme (`src/components/menu/ThemeMenu.tsx`) with no header toggle; the Tailwind `dark:` variant is rebound to `[data-theme='dark']` via `@custom-variant` |
@@ -34,30 +34,37 @@ src/
                     AutoAcceptSetting, TransferCard, TransferDetailsSheet,
                     TokenRow, TokenDetailSheet, TokenReceive, TokenHoldingDetail,
                     SendTokenForm, SendConfirm, ContactsPicker, AmountField,
-                    ConnectionFooter,
+                    ConnectionFooter, ConfirmPasswordForm, DarUploadPanel,
                     NewPasswordFields, CreateAccountForm, PasswordStrengthIndicator,
                     VaultPanel, VaultBackupPanel, UtilsPanel, utils/* (UtilsList, CreateContractUtil,
-                    ExerciseChoiceUtil, ActiveContractsUtil, DarUploadPanel, JsonField,
+                    ExerciseChoiceUtil, ActiveContractsUtil, JsonField,
                     UpdateIdResult), menu/* drawer, ui/* primitives).
                     ui/* wraps Radix headless primitives (Tabs on top of
                     @radix-ui/react-tabs; Sheet on top of @radix-ui/react-dialog;
                     Select on top of @radix-ui/react-select;
-                    Collapsible on top of @radix-ui/react-collapsible)
+                    Switch on top of @radix-ui/react-switch;
+                    Collapsible on top of @radix-ui/react-collapsible;
+                    AccountAvatar on top of @radix-ui/react-avatar)
                     and provides static visuals (Button, TextInput, PasswordInput,
-                    Alert, Card, OptionList, Stepper, DangerConfirm, AccountAvatar,
-                    PendingActionCard, Select, DetailRow, FileDropInput, Collapsible,
-                    Copyable, CopyableLabel, JsonView).
+                    Alert, Badge, Card, OptionList, Stepper, DangerConfirm,
+                    PendingActionCard, LoadingState, SectionLabel, MenuRow, DetailRow,
+                    FileDropInput, Copyable, CopyableLabel, JsonView).
   theme/            ThemeProvider + ThemeContext + useTheme hook driving the
                     [data-theme] attribute on <html>
   cip56/            Token-standard domain logic: holdings/UTXO summaries, transfers, amount formatting,
                     and Amulet preapproval; calls wallet-service cip56.* / amulet.* RPC
+  ledger/           Raw ledger reads and writes behind the Utils tab (active contracts,
+                    create contract, exercise choice)
   hooks/            React Query wrappers over cip56/ (token holdings, pending transfers,
                     Amulet preapproval) with polling and imperative refetch
   config/           Runtime config persisted to localStorage (wallet-service RPC URL)
+                    plus the shared QueryClient factory
   extension/        Chrome extension scripts: background, content script, provider injection
   provider/         CIP-0103 wallet provider — request dispatcher and method handlers
   vault/            Encrypted local vault: PBKDF2 key derivation, AES-GCM storage, React context
   utils/            Pure helpers (account formatting, clipboard, classnames cn, JSON pretty-print, file download, network-id display)
+  test-utils/       Fixtures shipped from src/ so tests import them through the @/ alias
+                    (an isolated QueryClient wrapper, an inert preapproval API stub)
   views/            Top-level UI views (onboarding/* three-step wizard (vault → RPC → first account), Unlock, Home,
                     ConnectionSettings) plus home/* — the extracted HomeView logic
                     (pending-actions state, extension/provider request handling,
@@ -65,9 +72,11 @@ src/
   wc/               WalletConnect sign client setup and session lifecycle API
   App.tsx           Root component — selects the active view based on vault state
   main.tsx          Entry point — detects chrome-extension:// vs web runtime
+  index.css         Tailwind entry: design tokens, @theme inline, base layer, keyframes
 public/
   manifest.json     Chrome extension manifest (consumed during extension build)
   icons/            Extension icons (16, 32, 48, 128 px)
+scripts/            install-gitleaks.sh — pins and installs the secret scanner into bin/
 test/               Node test runner suite (mirrors src/ layout)
 ```
 
@@ -174,6 +183,7 @@ State mutations (unlock, add account, sign) go through `VaultContext`. Network c
 | Variable | Purpose |
 |----------|---------|
 | `VITE_WC_PROJECT_ID` | Optional WalletConnect / Reown project ID (from cloud.reown.com), only needed for the WalletConnect fallback |
+| `VITE_MIN_PASSWORD_SCORE` | Optional minimum zxcvbn score (0-4) to accept a vault password. Defaults to 1; read in `src/vault/passwordStrength.ts` |
 
 Runtime-only configuration (the wallet-service RPC URL) is stored in `localStorage` via `src/config/runtimeConfig.ts` and is not an environment variable. The Canton network identity is no longer stored locally — it comes from wallet-service status.
 
@@ -181,14 +191,31 @@ Runtime-only configuration (the wallet-service RPC URL) is stored in `localStora
 
 | Command | Purpose |
 |---------|---------|
-| `npm run dev` | Start dev server at `http://localhost:3011` (strict port) |
-| `npm run build` | TypeScript check + Vite web build → `dist/` |
-| `npm run build:extension` | TypeScript check + Vite extension build → `dist-extension/` |
-| `npm test` | Run test suite with Node built-in test runner |
-| `npm run lint` | Biome lint + format check across all files |
-| `npm run lint:fix` | Biome lint + format check with auto-fix |
-| `npm run format` | Biome format-only with auto-fix |
-| `npm run preview` | Serve the production web build locally |
+| `pnpm run dev` | Start dev server at `http://localhost:3011` (strict port) |
+| `pnpm run build` | TypeScript check + Vite web build → `dist/` |
+| `pnpm run build:extension` | TypeScript check + Vite extension build → `dist-extension/` |
+| `pnpm run typecheck` | TypeScript project check, no emit |
+| `pnpm test` | Run test suite with Node built-in test runner |
+| `pnpm run lint` | Biome lint + format check across all files, warnings fail |
+| `pnpm run lint:fix` | Biome lint + format check with auto-fix |
+| `pnpm run format` | Biome format-only with auto-fix |
+| `pnpm knip` | Report unused files, exports and dependencies |
+| `pnpm run preview` | Serve the production web build locally |
+
+`scripts/install-gitleaks.sh` is not a package script. It downloads the gitleaks release pinned in `.gitleaks-version`, verifies its checksum and installs it into the gitignored `bin/`. The husky hooks and the CI gitleaks job both call it, so every scan runs the same binary against the same rules.
+
+## Quality Gates
+
+The same five checks run locally and in CI, so a clean commit is a clean pipeline.
+
+| Gate | Local | CI |
+|------|-------|-----|
+| Biome | pre-commit, on staged files | `pr.yml` job 1 |
+| TypeScript | pre-push | `pr.yml` job 2 |
+| Knip | pre-commit | `pr.yml` job 2 |
+| Tests | pre-commit | `pr.yml` job 3 |
+| Commitlint | commit-msg | `pr.yml` job 4, plus the PR title |
+| Gitleaks | pre-commit (staged diff), pre-push (outgoing range) | `pr.yml` job 5, full history |
 
 ---
 

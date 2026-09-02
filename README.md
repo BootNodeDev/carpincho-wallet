@@ -8,6 +8,28 @@ Carpincho is a wallet/provider UI with an encrypted local vault, an injected CIP
 dApp frontend -> injected CIP-0103 provider -> carpincho-wallet -> wallet-service /rpc -> Canton participant
 ```
 
+## Development
+
+Requires Node 24 (see `.nvmrc`) and pnpm.
+
+```bash
+pnpm install
+pnpm run dev
+```
+
+The dev server runs on http://localhost:3011.
+
+### Checks
+
+```bash
+pnpm run lint        # Biome, warnings fail
+pnpm run typecheck   # TypeScript
+pnpm test            # Node test runner
+pnpm knip            # unused files, exports and dependencies
+```
+
+`pnpm install` sets up the git hooks. The first commit downloads [gitleaks](https://github.com/gitleaks/gitleaks) into `bin/` (gitignored) and scans the staged diff for secrets; `git push` scans the outgoing commits. Both use the version pinned in `.gitleaks-version`, the same one CI runs.
+
 ## Browser extension
 
 ### From source
