@@ -4,7 +4,8 @@ import { DangerButton } from '@/components/ui/Button'
 interface DangerConfirmProps {
   // A mono identifier box (party id, origin, …). Omit for confirms with nothing to echo back.
   identifier?: string
-  message: ReactNode
+  // Omit when the title and the identifier already say everything.
+  message?: ReactNode
   note?: ReactNode
   confirmLabel: string
   onConfirm: () => void
@@ -34,7 +35,7 @@ export const DangerConfirm = ({
         </span>
       </div>
     )}
-    <p className="text-soft text-[0.95rem] leading-relaxed">{message}</p>
+    {message !== undefined && <p className="text-soft text-[0.95rem] leading-relaxed">{message}</p>}
     {note !== undefined && <p className="font-semibold text-foreground">{note}</p>}
     <DangerButton
       className="w-full"

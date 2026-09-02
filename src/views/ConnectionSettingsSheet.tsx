@@ -130,7 +130,6 @@ export const ConnectionSettingsSheet = ({
         <DangerConfirm
           testId="remove-endpoint"
           identifier={removeTarget?.url}
-          message="This endpoint will no longer be available to pick."
           confirmLabel="Remove endpoint"
           confirmTestId="confirm-remove-endpoint"
           onConfirm={onConfirmRemove}
