@@ -18,6 +18,7 @@ interface AlertProps {
   onDismiss?: () => void
   dismissLabel?: string
   className?: string
+  testId?: string
   children: ReactNode
 }
 
@@ -28,6 +29,7 @@ export const Alert = ({
   onDismiss,
   dismissLabel = 'Dismiss',
   className,
+  testId,
   children,
 }: AlertProps): JSX.Element => {
   const base = cn(
@@ -37,10 +39,20 @@ export const Alert = ({
     className,
   )
   if (onDismiss === undefined) {
-    return <div className={base}>{children}</div>
+    return (
+      <div
+        className={base}
+        data-testid={testId}
+      >
+        {children}
+      </div>
+    )
   }
   return (
-    <div className={base}>
+    <div
+      className={base}
+      data-testid={testId}
+    >
       <span className="min-w-0">{children}</span>
       <button
         type="button"

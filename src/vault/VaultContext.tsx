@@ -683,16 +683,20 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     ).catch(() => undefined)
   }, [isLocked, value.accounts, value.primary])
 
-  // A network switch changes which accounts a connected dApp may use, so it is an accounts
-  // change as far as the dapp-api is concerned. The ref keeps this to real transitions:
-  // the first render is the initial network, which the connect handshake already reported.
-  const broadcastNetworkId = useRef(networkId)
+  // Moving between two named networks changes which accounts a connected dApp may use, so it
+  // is an accounts change as far as the dapp-api is concerned. Three states are deliberately
+  // not: an unknown network (a switch clears the reported one until the new endpoint answers,
+  // and a failed poll names none — the accounts did not change, they are only unscoped for a
+  // moment), the first network the popup learns (nothing has been reported to anyone yet), and
+  // a switch made while locked, which the ref holds on to so unlock still announces it.
+  const broadcastNetworkId = useRef<string | undefined>(undefined)
   useEffect(() => {
-    if (broadcastNetworkId.current === networkId) {
+    if (isLocked || networkId === undefined || broadcastNetworkId.current === networkId) {
       return
     }
+    const previous = broadcastNetworkId.current
     broadcastNetworkId.current = networkId
-    if (!isLocked) {
+    if (previous !== undefined) {
       void broadcastWalletEvent('accountsChanged', accountsChangedPayload())
     }
   }, [networkId, isLocked, accountsChangedPayload])

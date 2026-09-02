@@ -39,8 +39,7 @@ export const useTokenHoldings = (
   const pollMs = options.pollMs === undefined ? TOKEN_HOLDINGS_POLL_MS : options.pollMs
   const query = useQuery({
     enabled: account !== undefined,
-    // The network is part of the cache identity: the same party id can exist on another one.
-    queryKey: ['cip56', 'holdingSummaries', account?.network, account?.id, account?.partyId],
+    queryKey: ['cip56', 'holdingSummaries', account?.id, account?.partyId],
     queryFn: () => api.listTokenHoldingSummaries(account?.partyId ?? ''),
     refetchInterval: pollMs === null ? false : pollMs,
   })
