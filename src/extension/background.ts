@@ -59,9 +59,23 @@ type RuntimeApi = {
 }
 
 type ActionApi = {
-  openPopup?: () => Promise<void> | void
   setBadgeText?: (details: { text: string }) => Promise<void> | void
   setBadgeBackgroundColor?: (details: { color: string }) => Promise<void> | void
+}
+
+type WindowsApi = {
+  create: (details: {
+    url: string
+    type: 'popup'
+    focused: boolean
+    width: number
+    height: number
+  }) => Promise<{ id?: number } | undefined>
+  update: (windowId: number, details: { focused: boolean }) => Promise<unknown>
+  remove: (windowId: number) => Promise<void>
+  onRemoved: {
+    addListener: (listener: (windowId: number) => void) => void
+  }
 }
 
 const chromeApi = (
@@ -70,6 +84,7 @@ const chromeApi = (
       runtime?: RuntimeApi
       action?: ActionApi
       tabs?: TabsApi
+      windows?: WindowsApi
     }
   }
 ).chrome
@@ -180,8 +195,46 @@ const updateActionBadge = async (): Promise<void> => {
   }
 }
 
-const openWalletPopup = async (): Promise<void> => {
-  await chromeApi?.action?.openPopup?.()
+// Chrome only allows `action.openPopup` from a gesture-carrying event, and the window
+// focused when a dApp request lands is the SDK's toolbar-less picker, so the toolbar popup
+// cannot be opened here. The wallet is opened as its own popup window instead: one at a
+// time, so a second queued request focuses it rather than opening another.
+const APPROVAL_WINDOW_WIDTH = 420
+const APPROVAL_WINDOW_HEIGHT = 640
+
+const approvalWindow: { id?: number; opening?: Promise<void> } = {}
+
+const createApprovalWindow = async (): Promise<void> => {
+  const created = await chromeApi?.windows?.create({
+    url: chromeApi?.runtime?.getURL('index.html') ?? 'index.html',
+    type: 'popup',
+    focused: true,
+    width: APPROVAL_WINDOW_WIDTH,
+    height: APPROVAL_WINDOW_HEIGHT,
+  })
+  approvalWindow.id = created?.id
+}
+
+const openApprovalWindow = async (): Promise<void> => {
+  await approvalWindow.opening?.catch(() => undefined)
+  if (approvalWindow.id !== undefined) {
+    await chromeApi?.windows?.update(approvalWindow.id, { focused: true })
+    return
+  }
+  approvalWindow.opening = createApprovalWindow()
+  await approvalWindow.opening
+}
+
+// Forgets the window before removing it so the `onRemoved` listener does not read this
+// deliberate close as the user dismissing the prompt.
+const closeApprovalWindow = async (): Promise<void> => {
+  const { id } = approvalWindow
+  if (id === undefined) {
+    return
+  }
+  approvalWindow.id = undefined
+  approvalWindow.opening = undefined
+  await chromeApi?.windows?.remove(id)
 }
 
 const queueProviderRequest = async (
@@ -201,7 +254,18 @@ const queueProviderRequest = async (
   })
   await updateActionBadge().catch(() => undefined)
   await notifyWalletViews(pending)
-  await openWalletPopup().catch(() => undefined)
+  await openApprovalWindow().catch(() => undefined)
+}
+
+// Closing the wallet window is the user walking away from every prompt it was showing:
+// each still-pending request has to be answered or the dApp's call never settles.
+const rejectPendingRequests = (): void => {
+  const abandoned = [...pendingRequests.values()]
+  pendingRequests.clear()
+  for (const entry of abandoned) {
+    entry.sendResponse(jsonRpcError(entry.pending.request.id, 4001, 'user rejected'))
+  }
+  void updateActionBadge().catch(() => undefined)
 }
 
 // Resolves whether the requesting origin has an approved direct connection.
@@ -235,6 +299,15 @@ const handleProviderRequest = async (
   }
   await queueProviderRequest(message, sendResponse)
 }
+
+chromeApi?.windows?.onRemoved.addListener((windowId) => {
+  if (windowId !== approvalWindow.id) {
+    return
+  }
+  approvalWindow.id = undefined
+  approvalWindow.opening = undefined
+  rejectPendingRequests()
+})
 
 chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'CARPINCHO_PROVIDER_REQUEST') {
@@ -283,6 +356,9 @@ chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
       message.response,
     ).catch(() => undefined)
     void updateActionBadge().catch(() => undefined)
+    if (pendingRequests.size === 0) {
+      void closeApprovalWindow().catch(() => undefined)
+    }
     sendResponse({ ok: true })
     return false
   }

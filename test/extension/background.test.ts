@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { after, before, describe, it } from 'node:test'
 import { DIRECT_CONNECTED_ORIGINS_KEY } from '@/extension/directConnections'
-import type { RuntimeEventRelay } from '@/extension/messages'
+import type { JsonRpcResponse, RuntimeEventRelay } from '@/extension/messages'
 
 const originalChrome = (globalThis as { chrome?: unknown }).chrome
 
@@ -11,12 +11,27 @@ type Listener = (
   sendResponse: (response?: unknown) => void,
 ) => boolean | undefined
 
+type WindowRemovedListener = (windowId: number) => void
+
+const APPROVAL_WINDOW_ID = 42
+
 const store: Record<string, unknown> = {
   [DIRECT_CONNECTED_ORIGINS_KEY]: ['http://localhost:3012', 'http://localhost:4000'],
 }
 const relayed: Array<{ tabId: number; message: RuntimeEventRelay }> = []
 const queried: Array<string | string[] | undefined> = []
+const createdWindows: Array<{ url: string; type: string; focused: boolean }> = []
+const focusedWindows: number[] = []
+const removedWindows: number[] = []
 let listener: Listener | undefined
+let windowRemoved: WindowRemovedListener | undefined
+
+const waitFor = async (done: () => boolean): Promise<void> => {
+  for (let attempt = 0; attempt < 200 && !done(); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  assert.ok(done(), 'timed out waiting for background work')
+}
 
 // background.ts reads `chrome` and registers its listener at import time, so the stub
 // must be in place before the module loads.
@@ -40,6 +55,23 @@ before(async () => {
         },
         sendMessage: async (tabId: number, message: RuntimeEventRelay) => {
           relayed.push({ tabId, message })
+        },
+      },
+      windows: {
+        create: async (details: { url: string; type: string; focused: boolean }) => {
+          createdWindows.push(details)
+          return { id: APPROVAL_WINDOW_ID }
+        },
+        update: async (windowId: number) => {
+          focusedWindows.push(windowId)
+        },
+        remove: async (windowId: number) => {
+          removedWindows.push(windowId)
+        },
+        onRemoved: {
+          addListener: (l: WindowRemovedListener) => {
+            windowRemoved = l
+          },
         },
       },
       storage: {
@@ -91,5 +123,79 @@ describe('background: CARPINCHO_FORGET_CONNECTED_ORIGIN', () => {
     // The origin is gone from storage and the response carries the remainder
     assert.deepEqual(store[DIRECT_CONNECTED_ORIGINS_KEY], ['http://localhost:4000'])
     assert.deepEqual(response, ['http://localhost:4000'])
+  })
+})
+
+// A `connect` from an origin the user has not approved is the case from issue #17: it needs
+// user approval, so the background queues it and has to bring the wallet up by itself.
+// Answers land in `answers` whenever the background settles the request.
+const queueConnect = (id: number, origin: string, answers: JsonRpcResponse[]): void => {
+  assert.ok(listener)
+  listener(
+    {
+      type: 'CARPINCHO_PROVIDER_REQUEST',
+      request: { jsonrpc: '2.0', id, method: 'connect' },
+      origin,
+    },
+    {},
+    (r) => {
+      answers.push(r as JsonRpcResponse)
+    },
+  )
+}
+
+describe('background: opening the wallet for a queued request', () => {
+  const first: JsonRpcResponse[] = []
+  const second: JsonRpcResponse[] = []
+
+  it('opens the wallet in its own window, with no toolbar click', async () => {
+    queueConnect(1, 'http://localhost:9000', first)
+    await waitFor(() => createdWindows.length === 1)
+
+    assert.equal(createdWindows[0].url, 'chrome-extension://test/index.html')
+    assert.equal(createdWindows[0].type, 'popup')
+    assert.equal(createdWindows[0].focused, true)
+    assert.deepEqual(focusedWindows, [])
+  })
+
+  it('focuses that window for a second request instead of opening another', async () => {
+    queueConnect(2, 'http://localhost:9001', second)
+    await waitFor(() => focusedWindows.length === 1)
+
+    assert.equal(createdWindows.length, 1)
+    assert.deepEqual(focusedWindows, [APPROVAL_WINDOW_ID])
+  })
+
+  it('answers every still-pending request as user-rejected when the window closes', () => {
+    assert.ok(windowRemoved)
+    windowRemoved(APPROVAL_WINDOW_ID)
+
+    for (const answers of [first, second]) {
+      assert.equal(answers.length, 1)
+      assert.deepEqual(answers[0].error, { code: 4001, message: 'user rejected' })
+    }
+  })
+})
+
+describe('background: answering the last request', () => {
+  it('closes the window the wallet opened', async () => {
+    const answers: JsonRpcResponse[] = []
+    queueConnect(3, 'http://localhost:9002', answers)
+    await waitFor(() => createdWindows.length === 2)
+
+    assert.ok(listener)
+    listener(
+      {
+        type: 'CARPINCHO_PROVIDER_RESPONSE',
+        requestId: '3',
+        response: { jsonrpc: '2.0', id: 3, result: { isConnected: true } },
+      },
+      {},
+      () => undefined,
+    )
+    await waitFor(() => removedWindows.length === 1)
+
+    assert.deepEqual(removedWindows, [APPROVAL_WINDOW_ID])
+    assert.deepEqual(answers[0].result, { isConnected: true })
   })
 })
