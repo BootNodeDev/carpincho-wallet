@@ -1,4 +1,4 @@
-import { loadRuntimeConfigAsync } from '@/config/runtimeConfig'
+import { activeRpcUrl, loadRuntimeConfigAsync } from '@/config/runtimeConfig'
 
 export interface JsonRpcErrorObject {
   code: number
@@ -60,7 +60,7 @@ export interface DarUploadResponse {
 
 const rpcUrl = async (options?: WalletServiceRequestOptions): Promise<string> =>
   options?.rpcUrl?.trim() === undefined || options.rpcUrl.trim() === ''
-    ? (await loadRuntimeConfigAsync()).walletServiceRpcUrl
+    ? activeRpcUrl(await loadRuntimeConfigAsync())
     : options.rpcUrl.trim()
 
 export const walletServiceRequest = async <T>(
@@ -118,10 +118,7 @@ type AdminRequestOptions = WalletServiceRequestOptions
 
 // Reuses the configured JSON-RPC base so admin utilities follow the same wallet-service target.
 const adminUrl = async (path: string, options?: AdminRequestOptions): Promise<string> => {
-  const base =
-    options?.rpcUrl?.trim() === undefined || options.rpcUrl.trim() === ''
-      ? (await loadRuntimeConfigAsync()).walletServiceRpcUrl
-      : options.rpcUrl.trim()
+  const base = await rpcUrl(options)
   return `${base.replace(/\/rpc\/?$/, '')}${path}`
 }
 

@@ -51,7 +51,7 @@ describe('ConfigureRpcStep', () => {
     await waitFor(() => assert.equal(continueButton().disabled, false))
     await userEvent.click(continueButton())
     assert.equal(confirmed, true)
-    assert.match(localStorage.getItem('carpincho.runtime-config.v2') ?? '', /localhost:3010/)
+    assert.match(localStorage.getItem('carpincho.runtime-config.v3') ?? '', /localhost:3010/)
   })
 
   it('keeps Continue disabled with a reason when unreachable and shows no Test button', async () => {

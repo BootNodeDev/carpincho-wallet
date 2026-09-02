@@ -3,6 +3,7 @@ import { PrimaryButton } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ALERT_CIRCLE_ICON, SPINNER_ICON } from '@/components/ui/icons'
 import { TextInput } from '@/components/ui/TextInput'
+import { activeRpcUrl, withActiveEndpointUrl } from '@/config/runtimeConfig'
 import { useRuntimeConfig } from '@/config/useRuntimeConfig'
 import { useWalletServiceTest } from '@/hooks/useWalletServiceTest'
 import { cn } from '@/utils/cn'
@@ -24,7 +25,7 @@ export interface ConfigureRpcStepProps {
 
 export const ConfigureRpcStep = ({ onConfirmed }: ConfigureRpcStepProps): JSX.Element => {
   const { config, saveConfig } = useRuntimeConfig()
-  const [url, setUrl] = useState(config.walletServiceRpcUrl)
+  const [url, setUrl] = useState(() => activeRpcUrl(config))
   const fieldId = useId()
   const { state, networkId, reason, testedUrl, test } = useWalletServiceTest()
 
@@ -53,7 +54,7 @@ export const ConfigureRpcStep = ({ onConfirmed }: ConfigureRpcStepProps): JSX.El
     state === 'connected' ? 'connected' : state === 'unreachable' ? 'unreachable' : 'pending'
 
   const onContinue = (): void => {
-    saveConfig({ ...config, walletServiceRpcUrl: url })
+    saveConfig(withActiveEndpointUrl(config, url))
     onConfirmed()
   }
 

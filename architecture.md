@@ -57,8 +57,8 @@ src/
                     create contract, exercise choice)
   hooks/            React Query wrappers over cip56/ (token holdings, pending transfers,
                     Amulet preapproval) with polling and imperative refetch
-  config/           Runtime config persisted to localStorage (wallet-service RPC URL)
-                    plus the shared QueryClient factory
+  config/           Runtime config persisted to localStorage (the saved wallet-service
+                    endpoints and the id of the one in use) plus the shared QueryClient factory
   extension/        Chrome extension scripts: background, content script, provider injection
   provider/         CIP-0103 wallet provider — request dispatcher and method handlers
   vault/            Encrypted local vault: PBKDF2 key derivation, AES-GCM storage, React context
@@ -66,7 +66,7 @@ src/
   test-utils/       Fixtures shipped from src/ so tests import them through the @/ alias
                     (an isolated QueryClient wrapper, an inert preapproval API stub)
   views/            Top-level UI views (onboarding/* three-step wizard (vault → RPC → first account), Unlock, Home,
-                    ConnectionSettings) plus home/* — the extracted HomeView logic
+                    ConnectionSettingsSheet) plus home/* — the extracted HomeView logic
                     (pending-actions state, extension/provider request handling,
                     WalletConnect lifecycle, transaction summarising)
   wc/               WalletConnect sign client setup and session lifecycle API
@@ -148,7 +148,7 @@ The app communicates with two external systems:
 
 | System | Module | Notes |
 |--------|--------|-------|
-| wallet-service JSON-RPC | `src/api/walletService.ts` | Wraps all RPC calls; URL comes from `src/config/runtimeConfig.ts` |
+| wallet-service JSON-RPC | `src/api/walletService.ts` | Wraps all RPC calls; the URL is the endpoint in use, resolved with `activeRpcUrl` from `src/config/runtimeConfig.ts` |
 | Injected extension provider | `src/extension/contentScript.ts` | Announces Carpincho to dApps through `canton:requestProvider` / `canton:announceProvider` and relays provider requests through the extension runtime |
 | WalletConnect relay | `src/wc/client.ts` | Optional fallback sign client connected to Reown relay using `VITE_WC_PROJECT_ID` |
 
@@ -185,7 +185,7 @@ State mutations (unlock, add account, sign) go through `VaultContext`. Network c
 | `VITE_WC_PROJECT_ID` | Optional WalletConnect / Reown project ID (from cloud.reown.com), only needed for the WalletConnect fallback |
 | `VITE_MIN_PASSWORD_SCORE` | Optional minimum zxcvbn score (0-4) to accept a vault password. Defaults to 1; read in `src/vault/passwordStrength.ts` |
 
-Runtime-only configuration (the wallet-service RPC URL) is stored in `localStorage` via `src/config/runtimeConfig.ts` and is not an environment variable. The Canton network identity is no longer stored locally — it comes from wallet-service status.
+Runtime-only configuration (the saved wallet-service endpoints and the id of the one in use) is stored in `localStorage` via `src/config/runtimeConfig.ts` under `carpincho.runtime-config.v3`, mirrored into `chrome.storage.local` for the MV3 worker, and is not an environment variable. A v2 install that held a single `walletServiceRpcUrl` is read once and kept as the first saved endpoint. The Canton network identity is no longer stored locally — it comes from wallet-service status.
 
 ## Scripts
 

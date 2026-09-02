@@ -10,7 +10,7 @@ import { forgetConnectedOrigin, isExtensionRuntime } from '@/extension/runtimeCl
 import { useWalletServiceStatus } from '@/hooks/useWalletServiceStatus'
 import { sortAccounts } from '@/utils/account'
 import { useVault } from '@/vault/useVault'
-import { ConnectionSettingsView } from '@/views/ConnectionSettingsView'
+import { ConnectionSettingsSheet } from '@/views/ConnectionSettingsSheet'
 import { PendingActionsSection } from '@/views/home/PendingActionsSection'
 import type {
   PendingConnectRequest,
@@ -176,15 +176,10 @@ export const HomeView = (): JSX.Element => {
         />
       </Sheet>
 
-      <Sheet
+      <ConnectionSettingsSheet
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
-        testId="connection-settings-sheet"
-        title="Connection"
-        description="Configure wallet-service URL and network."
-      >
-        <ConnectionSettingsView />
-      </Sheet>
+      />
 
       <Sheet
         open={disconnectConfirmOpen}

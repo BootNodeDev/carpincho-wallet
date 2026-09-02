@@ -44,8 +44,11 @@ describe('wallet-service admin API', () => {
       value: {
         storage: {
           local: {
-            get: async (key: string) => ({
-              [key]: { walletServiceRpcUrl: 'http://wallet.example/rpc' },
+            get: async () => ({
+              'carpincho.runtime-config.v3': {
+                endpoints: [{ id: 'devnet', name: 'Devnet', url: 'http://wallet.example/rpc' }],
+                activeEndpointId: 'devnet',
+              },
             }),
             set: async () => undefined,
           },
