@@ -3,7 +3,6 @@ import { afterEach, describe, it } from 'node:test'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TooltipProvider } from '@/components/ui/Tooltip'
-import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import { VaultContext, type VaultContextValue } from '@/vault/VaultContext'
 import { OnboardingFlow } from '@/views/onboarding/OnboardingFlow'
 
@@ -43,17 +42,13 @@ const baseVault = (overrides: Partial<VaultContextValue> = {}): VaultContextValu
     ...overrides,
   }) as VaultContextValue
 
-// The endpoint list this flow can open probes every saved endpoint through React Query, the
-// way it does under the app root.
 const renderFlow = (overrides: Partial<VaultContextValue> = {}): void => {
   render(
-    <TestQueryClientProvider>
-      <TooltipProvider>
-        <VaultContext.Provider value={baseVault(overrides)}>
-          <OnboardingFlow />
-        </VaultContext.Provider>
-      </TooltipProvider>
-    </TestQueryClientProvider>,
+    <TooltipProvider>
+      <VaultContext.Provider value={baseVault(overrides)}>
+        <OnboardingFlow />
+      </VaultContext.Provider>
+    </TooltipProvider>,
   )
 }
 
@@ -98,29 +93,6 @@ describe('OnboardingFlow', () => {
     renderFlow({ hasVault: true, accounts: [] })
     assert.ok(screen.getByLabelText(/wallet-service rpc url/i))
     assert.equal(screen.queryByTestId('add-account-hint-input'), null)
-  })
-
-  it('skips the stepper and asks only for an account when the vault holds accounts elsewhere', async () => {
-    // Switching to a network the user has no account on is not a first run: the endpoint is
-    // already configured, so the RPC step would only stand in the way.
-    renderFlow({ hasVault: true, accounts: [], offNetworkCount: 2 })
-    assert.ok(screen.getByTestId('add-account-hint-input'))
-    assert.equal(screen.queryByLabelText(/wallet-service rpc url/i), null)
-    assert.equal(screen.queryByTestId('step-1'), null)
-    assert.ok(
-      /no account on this network.*2 accounts are on other networks/is.test(
-        screen.getByTestId('onboarding-no-account-here').textContent ?? '',
-      ),
-    )
-  })
-
-  it('offers the endpoint list, the way back to a network with an account', async () => {
-    // This view replaces Home, which owns the endpoint list, so without this the user is
-    // stuck: creating a party on the wrong network would be the only way out.
-    installHealthyWalletService()
-    renderFlow({ hasVault: true, accounts: [], offNetworkCount: 1 })
-    await userEvent.click(screen.getByTestId('onboarding-open-connection'))
-    assert.ok(await screen.findByTestId('connection-settings-sheet'))
   })
 
   it('advances to step 3 (Create Account) after the RPC connection is confirmed', async () => {

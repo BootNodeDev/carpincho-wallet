@@ -11,24 +11,29 @@ import { cn } from '@/utils/cn'
 import { useVault } from '@/vault/useVault'
 import type { VaultContextValue } from '@/vault/VaultContext'
 import { VaultProvider } from '@/vault/VaultContext'
+import { AddNetworkAccount } from '@/views/AddNetworkAccount'
 import { HomeView } from '@/views/HomeView'
 import { OnboardingFlow } from '@/views/onboarding/OnboardingFlow'
 import { UnlockView } from '@/views/UnlockView'
 
 const queryClient = createQueryClient()
 
-export type ShellView = 'loading' | 'unlock' | 'onboarding' | 'home'
+export type ShellView = 'loading' | 'unlock' | 'onboarding' | 'add-network-account' | 'home'
 
-// First-run routing; order matters. Both onboarding cases (no vault, or unlocked vault with no
-// account for the network in use) collapse to one branch; OnboardingFlow runs the steps.
+// First-run routing; order matters. A vault with no account for the network in use is
+// 'add-network-account' when it holds accounts for other networks (an endpoint switch, so the
+// vault and RPC steps are already done) and 'onboarding' when it holds none at all.
 export const selectShellView = (
-  v: Pick<VaultContextValue, 'isLoading' | 'hasVault' | 'isLocked' | 'accounts'>,
+  v: Pick<
+    VaultContextValue,
+    'isLoading' | 'hasVault' | 'isLocked' | 'accounts' | 'offNetworkCount'
+  >,
 ): ShellView => {
   if (v.isLoading) return 'loading'
   if (!v.hasVault) return 'onboarding'
   if (v.isLocked) return 'unlock'
-  if (v.accounts.length === 0) return 'onboarding'
-  return 'home'
+  if (v.accounts.length > 0) return 'home'
+  return v.offNetworkCount > 0 ? 'add-network-account' : 'onboarding'
 }
 
 const Shell = (): JSX.Element => {
@@ -58,6 +63,7 @@ const Shell = (): JSX.Element => {
       {showHeader && <Header onOpenMenu={() => setMenuOpen(true)} />}
       {view === 'unlock' && <UnlockView />}
       {view === 'onboarding' && <OnboardingFlow />}
+      {view === 'add-network-account' && <AddNetworkAccount />}
       {view === 'home' && <HomeView />}
       {showHeader && (
         <MenuSheet

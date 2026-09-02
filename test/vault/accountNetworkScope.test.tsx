@@ -45,14 +45,12 @@ const captureVault = (networkId?: string): Harness => {
 const addAccount = async (
   ref: { current: VaultContextValue | null },
   name: string,
-  network: string,
 ): Promise<string> => {
   let id = ''
   await act(async () => {
     const account = await ref.current?.addAccount({
       name,
       partyId: `${name}::ns`,
-      network,
       privateKeyHex: 'aa'.repeat(32),
       publicKeyBase64: 'cHVibGlj',
     })
@@ -61,15 +59,18 @@ const addAccount = async (
   return id
 }
 
-// Seeds a vault with two accounts on the reported network and one on another.
+// Seeds a vault with two accounts on the reported network and one on another, each created the
+// way the user would: while the wallet was on that network.
 const seedVault = async (): Promise<Harness & { aliceId: string; carolId: string }> => {
   const harness = captureVault(LOCAL)
   await act(async () => {
     await harness.ref.current?.setup(PASSWORD)
   })
-  const aliceId = await addAccount(harness.ref, 'alice', LOCAL)
-  await addAccount(harness.ref, 'bob', LOCAL)
-  const carolId = await addAccount(harness.ref, 'carol', DEVNET)
+  const aliceId = await addAccount(harness.ref, 'alice')
+  await addAccount(harness.ref, 'bob')
+  harness.switchNetwork(DEVNET)
+  const carolId = await addAccount(harness.ref, 'carol')
+  harness.switchNetwork(LOCAL)
   return { ...harness, aliceId, carolId }
 }
 
@@ -162,6 +163,23 @@ describe('VaultContext account network scoping', () => {
       ['carol'],
     )
     assert.equal(snapshot?.primary?.id, harness.carolId)
+  })
+
+  it('refuses to add an account while no network is reported', async () => {
+    // The party was created on whatever network the endpoint is on; without one there is
+    // nothing to record the account against, and it would be invisible once one is reported.
+    const harness = await seedVault()
+    harness.switchNetwork(undefined)
+    await assert.rejects(
+      () =>
+        harness.ref.current?.addAccount({
+          name: 'dave',
+          partyId: 'dave::ns',
+          privateKeyHex: 'aa'.repeat(32),
+          publicKeyBase64: 'cHVibGlj',
+        }) ?? Promise.resolve(),
+      /has not reported a network/i,
+    )
   })
 
   it('reports no accounts while the vault is locked, whatever the network', async () => {

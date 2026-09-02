@@ -1,9 +1,5 @@
 import { useState } from 'react'
-import {
-  completeCreateParty,
-  getWalletServiceNetworkId,
-  prepareCreateParty,
-} from '@/api/walletService'
+import { completeCreateParty, prepareCreateParty } from '@/api/walletService'
 import { PrimaryButton, SecondaryButton } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -52,11 +48,9 @@ export const CreateAccountForm = ({
         onboardingId: prepared.onboardingId,
         signatureBase64,
       })
-      const networkId = await getWalletServiceNetworkId()
       await v.addAccount({
         name: trimmed,
         partyId: completed.partyId,
-        network: networkId,
         privateKeyHex: kp.privateKeyHex,
         publicKeyBase64: kp.publicKeyBase64,
       })

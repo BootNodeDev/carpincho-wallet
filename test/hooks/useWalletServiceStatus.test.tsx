@@ -3,6 +3,7 @@ import { afterEach, describe, it } from 'node:test'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { saveRuntimeConfig } from '@/config/runtimeConfig'
 import { useWalletServiceStatus } from '@/hooks/useWalletServiceStatus'
+import { TestQueryClientProvider } from '@/test-utils/queryClient'
 
 const originalFetch = globalThis.fetch
 
@@ -22,6 +23,15 @@ const StatusProbe = ({ pollMs = null }: { pollMs?: number | null }): JSX.Element
 }
 
 const field = (name: string): string => screen.getByTestId(name).textContent ?? ''
+
+// The status poll runs through React Query, the way it does under the app root.
+const renderProbe = (pollMs: number | null = null): void => {
+  render(
+    <TestQueryClientProvider>
+      <StatusProbe pollMs={pollMs} />
+    </TestQueryClientProvider>,
+  )
+}
 
 const statusResponse = (connected: boolean, networkId?: string): Response =>
   new Response(
@@ -54,7 +64,7 @@ describe('useWalletServiceStatus', () => {
     // Scenario: wallet-service responds and says Canton network connectivity is healthy.
     installStatusResponse(true)
 
-    render(<StatusProbe />)
+    renderProbe()
 
     // The footer state should become connected and expose the wallet-service network id.
     await waitFor(() => assert.equal(field('network'), 'canton:local'))
@@ -66,7 +76,7 @@ describe('useWalletServiceStatus', () => {
     // It still names the network, which is what scopes accounts.
     installStatusResponse(false)
 
-    render(<StatusProbe />)
+    renderProbe()
 
     await waitFor(() => assert.equal(field('network'), 'canton:local'))
     assert.equal(field('connected'), 'not connected')
@@ -75,7 +85,7 @@ describe('useWalletServiceStatus', () => {
   it('trims the reported network id, so it matches the one stored on accounts', async () => {
     installStatusResponse(true, '  canton:local  ')
 
-    render(<StatusProbe />)
+    renderProbe()
 
     await waitFor(() => assert.equal(field('network'), 'canton:local'))
   })
@@ -84,7 +94,7 @@ describe('useWalletServiceStatus', () => {
     // '' must not become a scope key of its own: it would match no account and empty the wallet.
     installStatusResponse(true, '   ')
 
-    render(<StatusProbe />)
+    renderProbe()
 
     await waitFor(() => assert.equal(field('connected'), 'connected'))
     assert.equal(field('network'), '-')
@@ -101,7 +111,7 @@ describe('useWalletServiceStatus', () => {
       return statusResponse(true, 'canton:local')
     }
 
-    render(<StatusProbe pollMs={20} />)
+    renderProbe(20)
     await waitFor(() => assert.equal(field('network'), 'canton:local'))
 
     fail = true
@@ -118,7 +128,7 @@ describe('useWalletServiceStatus', () => {
         ? statusResponse(true, 'canton:local')
         : await new Promise<Response>(() => undefined)
 
-    render(<StatusProbe />)
+    renderProbe()
     await waitFor(() => assert.equal(field('network'), 'canton:local'))
 
     act(() => {

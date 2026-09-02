@@ -56,7 +56,8 @@ src/
   ledger/           Raw ledger reads and writes behind the Utils tab (active contracts,
                     create contract, exercise choice)
   hooks/            React Query wrappers over cip56/ (token holdings, pending transfers,
-                    Amulet preapproval) with polling and imperative refetch
+                    Amulet preapproval) and over wallet-service status (the endpoint in use,
+                    endpoint reachability), with polling and imperative refetch
   config/           Runtime config persisted to localStorage (the saved wallet-service
                     endpoints and the id of the one in use) plus the shared QueryClient factory
   extension/        Chrome extension scripts: background, content script, provider injection
@@ -69,8 +70,8 @@ src/
   test-utils/       Fixtures shipped from src/ so tests import them through the @/ alias
                     (an isolated QueryClient wrapper, an inert preapproval API stub)
   views/            Top-level UI views (onboarding/* three-step wizard (vault → RPC → first account),
-                    which collapses to the account step alone when the vault already holds
-                    accounts for other networks, Unlock, Home,
+                    AddNetworkAccount for a vault whose accounts are all on other networks,
+                    Unlock, Home,
                     ConnectionSettingsSheet) plus home/* — the extracted HomeView logic
                     (pending-actions state, extension/provider request handling,
                     WalletConnect lifecycle, transaction summarising)
@@ -104,7 +105,7 @@ The vault is the security core of the wallet. It holds encrypted account secrets
 - **`storage.ts`** — Two-step localStorage write (`KEY_VAULT_NEXT` then `KEY_VAULT`) for crash-safe rotation. On load, checks for an interrupted rotation and recovers automatically.
 - **`keypair.ts`** — Ed25519 sign/verify wrappers around `@noble/ed25519`.
 - **`sessionUnlock.ts`** — Caches the session password and the absolute auto-lock deadline (`lockAt`) in `sessionStorage` (or `chrome.storage.session` when running as an extension) so the vault can survive page reloads while still honouring the configured idle timeout.
-- **`networkScope.ts`** — `accountsOnNetwork` / `scopedPrimaryId`, the two pure helpers behind account scoping. A Canton party is hosted on the one network it was created on, so the vault filters its accounts to the network the endpoint in use reports (`useNetwork`) before anything sees them: `accounts`, `primary`, the `accountsChanged` payload, the extension snapshot, and through them the dApp-facing `listAccounts` / `getPrimaryAccount`. The vault keeps a single `primaryAccountId` across networks, so when it points out of scope the oldest in-scope account stands in — that is what makes an endpoint switch land on an account that works, and `offNetworkCount` lets the UI account for the rest instead of letting them look lost. An unknown network id (endpoint unreachable, or a status without one) scopes nothing: the whole vault stays visible rather than the wallet emptying out on a hiccup. Party ids are unique per network, so import treats the same party id on another network as a new account.
+- **`networkScope.ts`** — the pure helpers behind account scoping: `accountsOnNetwork`, `resolvePrimaryId`, `recordBelongsToAccount`. A Canton party is hosted on the one network it was created on, so `VaultContext` scopes its accounts to the network the endpoint in use reports (`useNetwork`) in one place — a `scopeAccounts` helper — before anything sees them: `accounts`, `primary`, `offNetworkCount`, the `accountsChanged` payload, the extension snapshot, and through them the dApp-facing `listAccounts` / `getPrimaryAccount`. `addAccount` stamps that same network on the new entry, so an account cannot be recorded under a network the wallet is not scoped to (and it refuses while no network is reported). The vault keeps a single `primaryAccountId` across networks, so when it points out of scope `resolvePrimaryId` stands in the oldest in-scope account — that is what makes an endpoint switch land on an account that works (and it is the same rule `removeAccount` applies to what is left). An unknown network id (endpoint unreachable, or a status without one) scopes nothing: the whole vault stays visible rather than the wallet emptying out on a hiccup. Party ids are unique per network, so import treats the same party id on another network as a new account, and `recordBelongsToAccount` keeps a history record with the same party id on another network out of an account's activity.
 - **`useVault.ts`** — The only way components should access vault state. Never read `localStorage` directly.
 - **`passwordStrength.ts`** — Owns the `zxcvbn-ts` setup and exports `scorePassword(pw)`, `isPasswordAcceptable(pw)`, `isConfirmMismatch(pw, c)`, `isNewPasswordPairValid(pw, c)`, `usePasswordStrengthReady()`, `ensurePasswordStrengthReady()`, and `MIN_PASSWORD_SCORE`. The EN + common dictionaries load lazily via dynamic `import()` so the Unlock / Home bundles never pay for them; `usePasswordStrengthReady()` kicks off the load on mount and triggers a re-render once `scorePassword` is real. A small in-module cache deduplicates scoring across the indicator and the submit-gate. The password-quality gate is now enforced at the vault boundary too: `VaultContext.setup()` and `changePassword()` call `isPasswordAcceptable` via `ensurePasswordStrengthReady()`, not only the UI (Setup, Change Password, the live strength meter); every callsite that gates on password quality must import from here so the gate is defined in one place.
 
