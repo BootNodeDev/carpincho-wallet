@@ -2,8 +2,6 @@ import { useState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { SecondaryButton } from '@/components/ui/Button'
 import { WelcomeHero } from '@/components/WelcomeHero'
-import { offNetworkAccountsNote } from '@/utils/account'
-import { useVault } from '@/vault/useVault'
 import { ConnectionSettingsSheet } from '@/views/ConnectionSettingsSheet'
 import { CreateFirstAccount } from '@/views/onboarding/CreateFirstAccount'
 
@@ -11,7 +9,6 @@ import { CreateFirstAccount } from '@/views/onboarding/CreateFirstAccount'
 // an endpoint switch rather than a first run. It replaces Home, which owns the endpoint list,
 // so it has to offer the way back to the other network itself.
 export const AddNetworkAccount = (): JSX.Element => {
-  const v = useVault()
   const [connectionOpen, setConnectionOpen] = useState(false)
 
   return (
@@ -25,7 +22,7 @@ export const AddNetworkAccount = (): JSX.Element => {
           variant="info"
           testId="no-account-for-network"
         >
-          No account on this network. {offNetworkAccountsNote(v.offNetworkCount)}
+          No parties on this network, please create one to proceed.
         </Alert>
         <CreateFirstAccount />
         <SecondaryButton

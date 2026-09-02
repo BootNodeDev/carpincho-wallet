@@ -56,11 +56,11 @@ describe('AddNetworkAccount', () => {
     globalThis.fetch = originalFetch
   })
 
-  it('asks for an account for this network and accounts for the ones held elsewhere', () => {
+  it('asks for a party on this network', () => {
     renderView({ offNetworkCount: 2 })
     assert.ok(screen.getByTestId('add-account-hint-input'))
     assert.ok(
-      /no account on this network.*2 accounts are on other networks/is.test(
+      /no parties on this network/i.test(
         screen.getByTestId('no-account-for-network').textContent ?? '',
       ),
     )

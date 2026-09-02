@@ -7,8 +7,8 @@ export const shortMiddle = (value: string, head = 10, tail = 6): string => {
   return `${value.slice(0, head)}...${value.slice(-tail)}`
 }
 
-// One phrasing, shared by the account switcher and the onboarding fallback, for the accounts
-// the vault holds for networks other than the one in use.
+// How the account switcher accounts for the accounts the vault holds for networks other than
+// the one in use, so they do not read as missing.
 export const offNetworkAccountsNote = (count: number): string =>
   count === 1
     ? '1 account is on another network, kept for when you switch endpoint.'
