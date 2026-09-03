@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { ICON_BUTTON_CLASS, PLAIN_ICON_BUTTON_CLASS } from '@/components/ui/Button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/Collapsible'
@@ -8,7 +8,6 @@ import { DetailRow } from '@/components/ui/DetailRow'
 import { CHEVRON_DOWN_ICON, REFRESH_ICON, SEARCH_ICON, X_ICON } from '@/components/ui/icons'
 import { JsonView } from '@/components/ui/JsonView'
 import { TextInput } from '@/components/ui/TextInput'
-import { toast } from '@/components/ui/toast'
 import { queryKeys } from '@/config/queryKeys'
 import {
   type ActiveContract,
@@ -91,13 +90,6 @@ export const ActiveContractsUtil = ({
   const contracts = query.data ?? []
   const busy = query.isFetching
   const error = query.error?.message
-
-  // The panel shows the failure inline; the toast is what a user sees from another tab.
-  useEffect(() => {
-    if (error !== undefined) {
-      toast.error(error)
-    }
-  }, [error])
 
   const visible = contracts.filter((contract) => contractMatchesQuery(contract, filterQuery))
   const emptyMessage = query.isPending
