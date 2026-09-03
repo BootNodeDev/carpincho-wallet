@@ -1,10 +1,11 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { PrimaryButton } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
 import { toast } from '@/components/ui/toast'
 import { JsonField } from '@/components/utils/JsonField'
 import { UpdateIdResult } from '@/components/utils/UpdateIdResult'
+import { invalidateActiveContracts } from '@/config/queryKeys'
 import { createContract as defaultCreateContract } from '@/ledger/contracts'
 import { parseJsonObject } from '@/utils/json'
 import type { AccountPublic } from '@/vault/types'
@@ -21,6 +22,7 @@ export const CreateContractUtil = ({
   createContract = defaultCreateContract,
 }: CreateContractUtilProps): JSX.Element => {
   const vault = useVault()
+  const queryClient = useQueryClient()
   const [templateId, setTemplateId] = useState('')
   const [json, setJson] = useState('{}')
   const [jsonValid, setJsonValid] = useState(true)
@@ -34,7 +36,11 @@ export const CreateContractUtil = ({
         signMessage: vault.signMessage,
         recordTransaction: vault.recordTransaction,
       }),
-    onSuccess: () => toast.success('Contract created'),
+    // Not awaited: the contract exists, and the list it feeds is read from another screen.
+    onSuccess: () => {
+      toast.success('Contract created')
+      void invalidateActiveContracts(queryClient, account.partyId)
+    },
     onError: (err) => toast.error(err.message),
   })
   const busy = submit.isPending

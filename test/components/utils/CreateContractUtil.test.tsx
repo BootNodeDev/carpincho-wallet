@@ -1,10 +1,13 @@
 import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
+import { useQuery } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import { TooltipProvider } from '@/components/ui/Tooltip'
 import { toast } from '@/components/ui/toast'
 import { CreateContractUtil } from '@/components/utils/CreateContractUtil'
+import { queryKeys } from '@/config/queryKeys'
 import type { createContract as CreateContractFn } from '@/ledger/contracts'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import type { AccountPublic } from '@/vault/types'
@@ -43,7 +46,7 @@ const baseVault = (): VaultContextValue =>
     setAutoLockOption: () => undefined,
   }) as VaultContextValue
 
-const renderUtil = (createContract: typeof CreateContractFn): void => {
+const renderUtil = (createContract: typeof CreateContractFn, reads?: ReactNode): void => {
   render(
     <TestQueryClientProvider>
       <TooltipProvider>
@@ -52,6 +55,7 @@ const renderUtil = (createContract: typeof CreateContractFn): void => {
             account={ACCOUNT}
             createContract={createContract}
           />
+          {reads}
         </VaultContext.Provider>
       </TooltipProvider>
     </TestQueryClientProvider>,
@@ -84,6 +88,26 @@ describe('CreateContractUtil', () => {
     assert.deepEqual(calls[0]?.createArguments, { admin: 'alice::party' })
     await screen.findByText(/update-1/)
     assert.ok(screen.getByRole('button', { name: /Copy update ID/i }))
+  })
+
+  it('refreshes the active contract list after a create lands', async () => {
+    // Scenario: the contract set the browser lists just changed, so it must not keep
+    // answering from what the ledger held before the create.
+    let listReads = 0
+    const Contracts = (): JSX.Element => {
+      useQuery({
+        queryKey: queryKeys.activeContracts(ACCOUNT.partyId),
+        queryFn: async () => (listReads += 1),
+      })
+      return <span data-testid="contracts" />
+    }
+    renderUtil((async () => ({ updateId: 'update-1' })) as typeof CreateContractFn, <Contracts />)
+    await waitFor(() => assert.equal(listReads, 1))
+
+    await userEvent.type(screen.getByLabelText('Template ID'), 'pkg:Module:Template')
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => assert.equal(listReads, 2))
   })
 
   it('disables submit while the JSON is invalid', async () => {

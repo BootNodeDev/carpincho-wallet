@@ -52,3 +52,12 @@ export const invalidateTokenState = async (
     client.invalidateQueries({ queryKey: queryKeys.incomingTransfers(account) }),
   ])
 }
+
+// A create or an exercise changes the party's active contract set, so the browser that lists it
+// must not answer from what the ledger held before the write.
+export const invalidateActiveContracts = async (
+  client: QueryClient,
+  partyId: string,
+): Promise<void> => {
+  await client.invalidateQueries({ queryKey: queryKeys.activeContracts(partyId) })
+}

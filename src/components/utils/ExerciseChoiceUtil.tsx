@@ -1,10 +1,11 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { PrimaryButton } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
 import { toast } from '@/components/ui/toast'
 import { JsonField } from '@/components/utils/JsonField'
 import { UpdateIdResult } from '@/components/utils/UpdateIdResult'
+import { invalidateActiveContracts } from '@/config/queryKeys'
 import { exerciseContract as defaultExerciseContract } from '@/ledger/contracts'
 import { parseJsonObject } from '@/utils/json'
 import type { AccountPublic } from '@/vault/types'
@@ -21,6 +22,7 @@ export const ExerciseChoiceUtil = ({
   exerciseContract = defaultExerciseContract,
 }: ExerciseChoiceUtilProps): JSX.Element => {
   const vault = useVault()
+  const queryClient = useQueryClient()
   const [templateId, setTemplateId] = useState('')
   const [contractId, setContractId] = useState('')
   const [choice, setChoice] = useState('')
@@ -38,7 +40,11 @@ export const ExerciseChoiceUtil = ({
         signMessage: vault.signMessage,
         recordTransaction: vault.recordTransaction,
       }),
-    onSuccess: () => toast.success('Choice exercised'),
+    // Not awaited: the choice is exercised, and the list it feeds is read from another screen.
+    onSuccess: () => {
+      toast.success('Choice exercised')
+      void invalidateActiveContracts(queryClient, account.partyId)
+    },
     onError: (err) => toast.error(err.message),
   })
   const busy = submit.isPending
