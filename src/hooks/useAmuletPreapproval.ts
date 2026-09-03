@@ -1,5 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
-import { useCallback, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ExecutePreparedResponse } from '@/api/interactiveSubmission'
 import {
   type AmuletPreapprovalActionParams,
@@ -8,6 +7,7 @@ import {
   createAmuletPreapproval,
   getAmuletPreapprovalStatus,
 } from '@/cip56/amuletPreapproval'
+import { queryKeys } from '@/config/queryKeys'
 import type { AccountPublic } from '@/vault/types'
 import type { VaultContextValue } from '@/vault/VaultContext'
 
@@ -26,9 +26,10 @@ export interface AmuletPreapprovalState {
   loading: boolean
   busy: boolean
   error?: string
-  refresh: () => Promise<void>
-  enable: () => Promise<void>
-  disable: () => Promise<void>
+  toggle: (next: boolean) => Promise<ExecutePreparedResponse>
+  // The value the last toggle asked for, so the switch can read it before the ledger agrees.
+  // It outlives the command: the preapproval contract can take several polls to show up.
+  requested?: boolean
 }
 
 export interface AmuletPreapprovalOptions {
@@ -52,25 +53,18 @@ export const useAmuletPreapproval = (
   options: AmuletPreapprovalOptions = {},
 ): AmuletPreapprovalState => {
   const api = options.api ?? defaultApi
-  const [actionBusy, setActionBusy] = useState(false)
+  const queryClient = useQueryClient()
   const pollMs = options.pollMs === undefined ? AMULET_PREAPPROVAL_POLL_MS : options.pollMs
   const query = useQuery({
     enabled: account !== undefined,
-    queryKey: ['amulet', 'preapproval', account?.id, account?.partyId],
+    queryKey: queryKeys.amuletPreapproval(account),
     queryFn: () => api.getAmuletPreapprovalStatus(account?.partyId ?? ''),
     refetchInterval: pollMs === null ? false : pollMs,
   })
   const error = query.error instanceof Error ? query.error.message : undefined
 
-  const refresh = useCallback(async (): Promise<void> => {
-    if (account === undefined) {
-      return
-    }
-    await query.refetch()
-  }, [account, query])
-
-  const execute = useCallback(
-    async (action: 'enable' | 'disable'): Promise<void> => {
+  const toggleMutation = useMutation({
+    mutationFn: async (next: boolean): Promise<ExecutePreparedResponse> => {
       if (account === undefined) {
         throw new Error('no account selected')
       }
@@ -82,40 +76,26 @@ export const useAmuletPreapproval = (
         signMessage: options.signMessage,
         recordTransaction: options.recordTransaction,
       }
-      setActionBusy(true)
-      try {
-        if (action === 'enable') {
-          await api.createAmuletPreapproval(params)
-        } else {
-          await api.cancelAmuletPreapproval(params)
-        }
-        await query.refetch()
-      } finally {
-        setActionBusy(false)
-      }
+      return next
+        ? await api.createAmuletPreapproval(params)
+        : await api.cancelAmuletPreapproval(params)
     },
-    [account, api, options.signMessage, options.recordTransaction, query],
-  )
+    // Awaited, so the action reads as in flight until the fresh status lands.
+    onSuccess: async () =>
+      await queryClient.invalidateQueries({ queryKey: queryKeys.amuletPreapproval(account) }),
+  })
+  const { mutateAsync: toggle, isPending, isError, variables } = toggleMutation
+  // Held past the command, because a fresh status can still report the old value: the switch
+  // keeps showing what was asked for until a poll agrees with it. A failure drops the claim.
+  const requested = isError ? undefined : variables
 
-  const enable = useCallback(async (): Promise<void> => {
-    await execute('enable')
-  }, [execute])
-
-  const disable = useCallback(async (): Promise<void> => {
-    await execute('disable')
-  }, [execute])
-
-  return useMemo(
-    () => ({
-      status: query.data,
-      loading: query.isFetching,
-      // Action-in-flight only, so poll refetches don't gate callers' input.
-      busy: actionBusy,
-      ...(error === undefined ? {} : { error }),
-      refresh,
-      enable,
-      disable,
-    }),
-    [query.data, query.isFetching, actionBusy, error, refresh, enable, disable],
-  )
+  return {
+    status: query.data,
+    loading: query.isFetching,
+    // Action-in-flight only, so poll refetches don't gate callers' input.
+    busy: isPending,
+    ...(error === undefined ? {} : { error }),
+    toggle,
+    ...(requested === undefined ? {} : { requested }),
+  }
 }

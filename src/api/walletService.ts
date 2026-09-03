@@ -111,6 +111,26 @@ export const networkIdFromStatus = (status: WalletServiceStatusResponse): string
   return networkId === '' ? undefined : networkId
 }
 
+// What a status payload says, reduced to the three things callers act on.
+export interface WalletServiceStatus {
+  connected: boolean
+  networkId?: string
+  reason?: string
+}
+
+// The one reading of a status payload, so the footer, the endpoint list and the onboarding
+// probe cannot drift on what counts as connected or where the reason lives.
+export const statusFromResponse = (status: WalletServiceStatusResponse): WalletServiceStatus => {
+  const networkId = networkIdFromStatus(status)
+  return {
+    connected: isCantonConnected(status),
+    ...(networkId === undefined ? {} : { networkId }),
+    ...(status.connection?.networkReason === undefined
+      ? {}
+      : { reason: status.connection.networkReason }),
+  }
+}
+
 // Extracts the active network id and fails when wallet-service cannot provide one.
 export const networkIdFromWalletServiceStatus = (status: WalletServiceStatusResponse): string => {
   const networkId = networkIdFromStatus(status)

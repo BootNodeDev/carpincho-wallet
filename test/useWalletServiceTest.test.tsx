@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { useWalletServiceTest } from '@/hooks/useWalletServiceTest'
+import { TestQueryClientProvider } from '@/test-utils/queryClient'
 
 const originalFetch = globalThis.fetch
 
@@ -17,7 +18,9 @@ describe('useWalletServiceTest', () => {
 
   it('maps a connected status to connected with the network id', async () => {
     respond({ connection: { isNetworkConnected: true }, network: { networkId: 'canton:local' } })
-    const { result } = renderHook(() => useWalletServiceTest())
+    const { result } = renderHook(() => useWalletServiceTest(), {
+      wrapper: TestQueryClientProvider,
+    })
     await act(async () => {
       await result.current.test('http://host/rpc')
     })
@@ -28,7 +31,9 @@ describe('useWalletServiceTest', () => {
 
   it('maps a responded-but-not-connected status to not-connected with the reason', async () => {
     respond({ connection: { isNetworkConnected: false, networkReason: 'syncing' } })
-    const { result } = renderHook(() => useWalletServiceTest())
+    const { result } = renderHook(() => useWalletServiceTest(), {
+      wrapper: TestQueryClientProvider,
+    })
     await act(async () => {
       await result.current.test('http://host/rpc')
     })
@@ -41,7 +46,9 @@ describe('useWalletServiceTest', () => {
     globalThis.fetch = async () => {
       throw new Error('Failed to fetch')
     }
-    const { result } = renderHook(() => useWalletServiceTest())
+    const { result } = renderHook(() => useWalletServiceTest(), {
+      wrapper: TestQueryClientProvider,
+    })
     await act(async () => {
       await result.current.test('http://host/rpc')
     })
@@ -72,7 +79,9 @@ describe('useWalletServiceTest', () => {
       )
     }) as typeof fetch
 
-    const { result } = renderHook(() => useWalletServiceTest())
+    const { result } = renderHook(() => useWalletServiceTest(), {
+      wrapper: TestQueryClientProvider,
+    })
     await act(async () => {
       const stale = result.current.test('http://stale/rpc')
       const fresh = result.current.test('http://fresh/rpc')

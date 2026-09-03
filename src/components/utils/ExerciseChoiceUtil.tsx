@@ -1,9 +1,11 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { PrimaryButton } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
 import { toast } from '@/components/ui/toast'
 import { JsonField } from '@/components/utils/JsonField'
 import { UpdateIdResult } from '@/components/utils/UpdateIdResult'
+import { invalidateActiveContracts } from '@/config/queryKeys'
 import { exerciseContract as defaultExerciseContract } from '@/ledger/contracts'
 import { parseJsonObject } from '@/utils/json'
 import type { AccountPublic } from '@/vault/types'
@@ -20,13 +22,34 @@ export const ExerciseChoiceUtil = ({
   exerciseContract = defaultExerciseContract,
 }: ExerciseChoiceUtilProps): JSX.Element => {
   const vault = useVault()
+  const queryClient = useQueryClient()
   const [templateId, setTemplateId] = useState('')
   const [contractId, setContractId] = useState('')
   const [choice, setChoice] = useState('')
   const [json, setJson] = useState('{}')
   const [jsonValid, setJsonValid] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [updateId, setUpdateId] = useState<string | undefined>()
+
+  const submit = useMutation({
+    mutationFn: async () =>
+      await exerciseContract({
+        account,
+        templateId: templateId.trim(),
+        contractId: contractId.trim(),
+        choice: choice.trim(),
+        choiceArgument: parseJsonObject(json, 'Choice argument'),
+        signMessage: vault.signMessage,
+        recordTransaction: vault.recordTransaction,
+      }),
+    // Not awaited: the choice is exercised, and the list it feeds is read from another screen.
+    onSuccess: () => {
+      toast.success('Choice exercised')
+      void invalidateActiveContracts(queryClient, account.partyId)
+    },
+    onError: (err) => toast.error(err.message),
+  })
+  const busy = submit.isPending
+  // A resubmit clears the previous id rather than leaving a stale one under the form.
+  const updateId = busy ? undefined : submit.data?.updateId
 
   const canSubmit =
     templateId.trim() !== '' &&
@@ -35,35 +58,12 @@ export const ExerciseChoiceUtil = ({
     jsonValid &&
     !busy
 
-  const onSubmit = async (): Promise<void> => {
-    setBusy(true)
-    setUpdateId(undefined)
-    try {
-      const choiceArgument = parseJsonObject(json, 'Choice argument')
-      const result = await exerciseContract({
-        account,
-        templateId: templateId.trim(),
-        contractId: contractId.trim(),
-        choice: choice.trim(),
-        choiceArgument,
-        signMessage: vault.signMessage,
-        recordTransaction: vault.recordTransaction,
-      })
-      setUpdateId(result.updateId)
-      toast.success('Choice exercised')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <form
       className="flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault()
-        void onSubmit()
+        submit.mutate()
       }}
     >
       <label

@@ -1,9 +1,6 @@
 import { createContext, type PropsWithChildren } from 'react'
-import {
-  UNKNOWN_NETWORK_STATUS,
-  useWalletServiceStatus,
-  type WalletServiceStatus,
-} from '@/hooks/useWalletServiceStatus'
+import type { WalletServiceStatus } from '@/api/walletService'
+import { UNKNOWN_NETWORK_STATUS, useWalletServiceStatus } from '@/hooks/useWalletServiceStatus'
 
 // The network the active endpoint reports is read in two places that must agree — the vault
 // scopes accounts to it, the footer renders it — so it is polled once here and shared.

@@ -6,6 +6,7 @@ import {
   type TokenHolding,
   type TokenHoldingSummary,
 } from '@/cip56/holdings'
+import { queryKeys } from '@/config/queryKeys'
 import type { AccountPublic } from '@/vault/types'
 
 export interface Cip56HoldingDetailsApi {
@@ -37,7 +38,7 @@ export const useTokenHoldingDetails = (
     cachedHoldings === undefined
   const query = useQuery({
     enabled,
-    queryKey: ['cip56', 'holdingDetails', account?.id, account?.partyId, summary?.key],
+    queryKey: queryKeys.holdingDetails(account, summary?.key),
     queryFn: async () => {
       const holdings = await api.listTokenHoldings(account?.partyId ?? '')
       return filterTokenHoldingsByInstrument(holdings, summary?.instrumentId)

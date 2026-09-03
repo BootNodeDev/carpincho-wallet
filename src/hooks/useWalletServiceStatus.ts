@@ -1,19 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import {
-  isCantonConnected,
-  networkIdFromStatus,
-  type WalletServiceStatusResponse,
+  statusFromResponse,
+  type WalletServiceStatus,
   walletServiceStatus,
 } from '@/api/walletService'
+import { queryKeys } from '@/config/queryKeys'
 import { activeRpcUrl } from '@/config/runtimeConfig'
 import { useRuntimeConfig } from '@/config/useRuntimeConfig'
-
-export interface WalletServiceStatus {
-  connected: boolean
-  networkId?: string
-  reason?: string
-}
 
 interface UseWalletServiceStatusOptions {
   pollMs?: number | null
@@ -24,18 +18,6 @@ const DEFAULT_POLL_MS = 5000
 // Nothing is known about the endpoint yet, which is also how an endpoint that names no network
 // reads. Callers scope on `networkId`, so this is the "scope nothing" state.
 export const UNKNOWN_NETWORK_STATUS: WalletServiceStatus = { connected: false }
-
-// Converts the wallet-service status payload into the footer's binary Canton state.
-const statusFromResponse = (status: WalletServiceStatusResponse): WalletServiceStatus => {
-  const networkId = networkIdFromStatus(status)
-  return {
-    connected: isCantonConnected(status),
-    ...(networkId === undefined ? {} : { networkId }),
-    ...(status.connection?.networkReason === undefined
-      ? {}
-      : { reason: status.connection.networkReason }),
-  }
-}
 
 // A poll that failed says nothing about which network the endpoint is on, only that it did not
 // answer this time. Keeping the network it last named stops a transient failure from un-scoping
@@ -57,7 +39,7 @@ export const useWalletServiceStatus = (
   // that described the endpoint just left, and a slow probe cannot land on a later one. A
   // failed poll keeps the last payload for the key, which is what `unreachableStatus` reads.
   const query = useQuery({
-    queryKey: ['walletService', 'status', url],
+    queryKey: queryKeys.walletServiceStatus(url),
     queryFn: async () => await walletServiceStatus({ rpcUrl: url }),
     refetchInterval: pollMs === null ? false : pollMs,
   })

@@ -6,6 +6,7 @@ import { type UtilsApi, UtilsPanel } from '@/components/UtilsPanel'
 import { TooltipProvider } from '@/components/ui/Tooltip'
 import { toast } from '@/components/ui/toast'
 import type { ActiveContract } from '@/ledger/contracts'
+import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import type { AccountPublic } from '@/vault/types'
 import { VaultContext, type VaultContextValue } from '@/vault/VaultContext'
 
@@ -58,14 +59,16 @@ const baseVault = (): VaultContextValue =>
 
 const renderPanel = (api: UtilsApi): void => {
   render(
-    <TooltipProvider>
-      <VaultContext.Provider value={baseVault()}>
-        <UtilsPanel
-          account={ACCOUNT}
-          api={api}
-        />
-      </VaultContext.Provider>
-    </TooltipProvider>,
+    <TestQueryClientProvider>
+      <TooltipProvider>
+        <VaultContext.Provider value={baseVault()}>
+          <UtilsPanel
+            account={ACCOUNT}
+            api={api}
+          />
+        </VaultContext.Provider>
+      </TooltipProvider>
+    </TestQueryClientProvider>,
   )
 }
 
@@ -133,17 +136,19 @@ describe('UtilsPanel', () => {
 
   it('warns when there is no account', () => {
     render(
-      <TooltipProvider>
-        <VaultContext.Provider value={baseVault()}>
-          <UtilsPanel
-            api={{
-              createContract: async () => ({ updateId: 'x' }),
-              exerciseContract: async () => ({ updateId: 'x' }),
-              listActiveContracts: async () => [],
-            }}
-          />
-        </VaultContext.Provider>
-      </TooltipProvider>,
+      <TestQueryClientProvider>
+        <TooltipProvider>
+          <VaultContext.Provider value={baseVault()}>
+            <UtilsPanel
+              api={{
+                createContract: async () => ({ updateId: 'x' }),
+                exerciseContract: async () => ({ updateId: 'x' }),
+                listActiveContracts: async () => [],
+              }}
+            />
+          </VaultContext.Provider>
+        </TooltipProvider>
+      </TestQueryClientProvider>,
     )
     assert.ok(screen.getByText(/create an account/i))
   })

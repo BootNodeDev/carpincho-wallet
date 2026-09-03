@@ -1,9 +1,11 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { PrimaryButton } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
 import { toast } from '@/components/ui/toast'
 import { JsonField } from '@/components/utils/JsonField'
 import { UpdateIdResult } from '@/components/utils/UpdateIdResult'
+import { invalidateActiveContracts } from '@/config/queryKeys'
 import { createContract as defaultCreateContract } from '@/ledger/contracts'
 import { parseJsonObject } from '@/utils/json'
 import type { AccountPublic } from '@/vault/types'
@@ -20,41 +22,38 @@ export const CreateContractUtil = ({
   createContract = defaultCreateContract,
 }: CreateContractUtilProps): JSX.Element => {
   const vault = useVault()
+  const queryClient = useQueryClient()
   const [templateId, setTemplateId] = useState('')
   const [json, setJson] = useState('{}')
   const [jsonValid, setJsonValid] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [updateId, setUpdateId] = useState<string | undefined>()
 
-  const canSubmit = templateId.trim() !== '' && jsonValid && !busy
-
-  const onSubmit = async (): Promise<void> => {
-    setBusy(true)
-    setUpdateId(undefined)
-    try {
-      const createArguments = parseJsonObject(json, 'Create arguments')
-      const result = await createContract({
+  const submit = useMutation({
+    mutationFn: async () =>
+      await createContract({
         account,
         templateId: templateId.trim(),
-        createArguments,
+        createArguments: parseJsonObject(json, 'Create arguments'),
         signMessage: vault.signMessage,
         recordTransaction: vault.recordTransaction,
-      })
-      setUpdateId(result.updateId)
+      }),
+    // Not awaited: the contract exists, and the list it feeds is read from another screen.
+    onSuccess: () => {
       toast.success('Contract created')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
+      void invalidateActiveContracts(queryClient, account.partyId)
+    },
+    onError: (err) => toast.error(err.message),
+  })
+  const busy = submit.isPending
+  // A resubmit clears the previous id rather than leaving a stale one under the form.
+  const updateId = busy ? undefined : submit.data?.updateId
+  const canSubmit = templateId.trim() !== '' && jsonValid && !busy
 
   return (
     <form
       className="flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault()
-        void onSubmit()
+        submit.mutate()
       }}
     >
       <label

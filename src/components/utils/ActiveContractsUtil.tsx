@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { ICON_BUTTON_CLASS, PLAIN_ICON_BUTTON_CLASS } from '@/components/ui/Button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/Collapsible'
@@ -7,7 +8,7 @@ import { DetailRow } from '@/components/ui/DetailRow'
 import { CHEVRON_DOWN_ICON, REFRESH_ICON, SEARCH_ICON, X_ICON } from '@/components/ui/icons'
 import { JsonView } from '@/components/ui/JsonView'
 import { TextInput } from '@/components/ui/TextInput'
-import { toast } from '@/components/ui/toast'
+import { queryKeys } from '@/config/queryKeys'
 import {
   type ActiveContract,
   contractMatchesQuery,
@@ -80,33 +81,18 @@ export const ActiveContractsUtil = ({
   listActiveContracts = defaultList,
 }: ActiveContractsUtilProps): JSX.Element => {
   const [filterQuery, setFilterQuery] = useState('')
-  const [contracts, setContracts] = useState<ActiveContract[]>([])
-  const [busy, setBusy] = useState(false)
   const [spinning, setSpinning] = useState(false)
-  const [error, setError] = useState<string | undefined>()
-  const [loaded, setLoaded] = useState(false)
 
-  const refresh = useCallback(async (): Promise<void> => {
-    setBusy(true)
-    setError(undefined)
-    try {
-      setContracts(await listActiveContracts({ partyId: account.partyId }))
-      setLoaded(true)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      setError(message)
-      toast.error(message)
-    } finally {
-      setBusy(false)
-    }
-  }, [account.partyId, listActiveContracts])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
+  const query = useQuery({
+    queryKey: queryKeys.activeContracts(account.partyId),
+    queryFn: async () => await listActiveContracts({ partyId: account.partyId }),
+  })
+  const contracts = query.data ?? []
+  const busy = query.isFetching
+  const error = query.error?.message
 
   const visible = contracts.filter((contract) => contractMatchesQuery(contract, filterQuery))
-  const emptyMessage = !loaded
+  const emptyMessage = query.isPending
     ? 'Loading active contracts...'
     : contracts.length === 0
       ? 'No active contracts.'
@@ -154,7 +140,7 @@ export const ActiveContractsUtil = ({
           disabled={busy}
           onClick={() => {
             setSpinning(true)
-            void refresh()
+            void query.refetch()
           }}
           className={cn(ICON_BUTTON_CLASS, 'size-8 rounded-md [&_svg]:size-[1.05rem]')}
         >

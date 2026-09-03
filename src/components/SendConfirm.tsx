@@ -1,4 +1,5 @@
-import { type ReactNode, useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
 import { formatTokenAmount } from '@/cip56/amount'
 import type { TokenHoldingSummary } from '@/cip56/holdings'
 import { transferTimeLabel } from '@/cip56/transfers'
@@ -11,6 +12,7 @@ import {
 import { PrimaryButton, SecondaryButton } from '@/components/ui/Button'
 import { JsonView } from '@/components/ui/JsonView'
 import { toast } from '@/components/ui/toast'
+import { invalidateTokenState } from '@/config/queryKeys'
 import { shortMiddle } from '@/utils/account'
 import type { AccountPublic } from '@/vault/types'
 import { useVault } from '@/vault/useVault'
@@ -48,8 +50,7 @@ export const SendConfirm = ({
   onSent,
 }: SendConfirmProps): JSX.Element => {
   const vault = useVault()
-  const [submitting, setSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState<string | undefined>(undefined)
+  const queryClient = useQueryClient()
 
   const expirationDate = transferDeadlineExpiration(deadline).toISOString()
   const trimmedMemo = memo.trim()
@@ -62,29 +63,36 @@ export const SendConfirm = ({
   }
   const request = { sender: account.partyId, instrumentId: summary.instrumentId?.id, ...shared }
 
-  const onConfirm = async (): Promise<void> => {
-    if (summary.instrumentId?.id === undefined) {
-      setSubmitError('Token is missing an instrument id')
-      return
-    }
-    setSubmitting(true)
-    setSubmitError(undefined)
-    try {
-      await sendApi.createTokenTransfer({
+  // A sent transfer leaves the sender's balance and joins the receiver's pending list, so the
+  // mutation refreshes both caches as soon as it lands.
+  const submit = useMutation({
+    mutationFn: async () => {
+      if (summary.instrumentId?.id === undefined) {
+        throw new Error('Token is missing an instrument id')
+      }
+      return await sendApi.createTokenTransfer({
         account,
         instrumentId: summary.instrumentId,
         ...shared,
         signMessage: vault.signMessage,
         recordTransaction: vault.recordTransaction,
       })
+    },
+    // Not awaited: the transfer is already submitted, and the reads have no timeout, so
+    // waiting on them would leave a finished send stuck on "Sending..." with the sheet open.
+    onSuccess: () => {
+      void invalidateTokenState(queryClient, account)
+    },
+  })
+  const submitError = submit.error?.message
+
+  const onConfirm = async (): Promise<void> => {
+    try {
+      await submit.mutateAsync()
       toast.success('Transfer submitted.')
       onSent()
     } catch (err) {
-      const message = (err as Error).message
-      setSubmitError(message)
-      toast.error(`Send failed: ${message}`)
-    } finally {
-      setSubmitting(false)
+      toast.error(`Send failed: ${(err as Error).message}`)
     }
   }
 
@@ -124,18 +132,18 @@ export const SendConfirm = ({
         <SecondaryButton
           data-testid="send-cancel"
           onClick={onCancel}
-          disabled={submitting}
+          disabled={submit.isPending}
         >
           Cancel
         </SecondaryButton>
         <PrimaryButton
           data-testid="send-confirm"
-          disabled={submitting}
+          disabled={submit.isPending}
           onClick={() => {
             void onConfirm()
           }}
         >
-          {submitting ? 'Sending...' : 'Confirm'}
+          {submit.isPending ? 'Sending...' : 'Confirm'}
         </PrimaryButton>
       </div>
     </div>

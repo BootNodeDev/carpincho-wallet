@@ -1,11 +1,15 @@
 import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
+import { useQuery } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import type { TokenHoldingSummary } from '@/cip56/holdings'
 import { SendConfirm } from '@/components/SendConfirm'
 import type { Cip56SendApi } from '@/components/SendTokenForm'
 import { toast } from '@/components/ui/toast'
+import { queryKeys } from '@/config/queryKeys'
+import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import type { AccountPublic } from '@/vault/types'
 import { VaultContext, type VaultContextValue } from '@/vault/VaultContext'
 
@@ -50,25 +54,39 @@ const baseVault = (): VaultContextValue =>
     setAutoLockOption: () => undefined,
   }) as VaultContextValue
 
+// Registers the holdings read a sent transfer invalidates, with a fetch that never answers,
+// so the follow-up refresh cannot settle.
+const StalledHoldings = (): JSX.Element => {
+  useQuery({
+    queryKey: queryKeys.holdingSummaries(ACCOUNT),
+    queryFn: () => new Promise<never>(() => undefined),
+  })
+  return <span data-testid="stalled-holdings" />
+}
+
 const renderConfirm = (
   sendApi: Cip56SendApi,
   onSent: () => void,
   onCancel = (): void => undefined,
+  reads?: ReactNode,
 ): void => {
   render(
-    <VaultContext.Provider value={baseVault()}>
-      <SendConfirm
-        account={ACCOUNT}
-        summary={SUMMARY}
-        recipient="bob::party"
-        amount="7.5"
-        memo="lunch"
-        deadline="1h"
-        sendApi={sendApi}
-        onCancel={onCancel}
-        onSent={onSent}
-      />
-    </VaultContext.Provider>,
+    <TestQueryClientProvider>
+      <VaultContext.Provider value={baseVault()}>
+        <SendConfirm
+          account={ACCOUNT}
+          summary={SUMMARY}
+          recipient="bob::party"
+          amount="7.5"
+          memo="lunch"
+          deadline="1h"
+          sendApi={sendApi}
+          onCancel={onCancel}
+          onSent={onSent}
+        />
+        {reads}
+      </VaultContext.Provider>
+    </TestQueryClientProvider>,
   )
 }
 
@@ -99,6 +117,56 @@ describe('SendConfirm', () => {
     assert.equal(sent[0]?.memo, 'lunch')
     assert.deepEqual(sent[0]?.instrumentId, { admin: 'dso::party', id: 'Amulet' })
     assert.equal(typeof sent[0]?.expirationDate, 'string')
+  })
+
+  it('reports a sent transfer even when the follow-up refresh stalls', async () => {
+    // Scenario: the transfer lands but a holdings read hangs. Neither the success toast nor
+    // the close may wait on that read, or a completed send leaves the sheet stuck on
+    // "Sending..." with Cancel disabled.
+    let sentCount = 0
+    renderConfirm(
+      { createTokenTransfer: async () => ({ updateId: 'u1' }) },
+      () => (sentCount += 1),
+      () => undefined,
+      <StalledHoldings />,
+    )
+    await screen.findByTestId('stalled-holdings')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => assert.equal(sentCount, 1))
+    assert.equal(screen.getByTestId('send-confirm').textContent, 'Confirm')
+  })
+
+  it('refreshes balances after a send without re-reading the open token UTXO list', async () => {
+    // Scenario: the sheet closes as the send lands, so refetching its UTXO list would be a
+    // listHoldings round trip with nothing left to render it. Balances still refresh.
+    let summaryReads = 0
+    let detailReads = 0
+    const Reads = (): JSX.Element => {
+      useQuery({
+        queryKey: queryKeys.holdingSummaries(ACCOUNT),
+        queryFn: async () => (summaryReads += 1),
+      })
+      useQuery({
+        queryKey: queryKeys.holdingDetails(ACCOUNT, SUMMARY.key),
+        queryFn: async () => (detailReads += 1),
+      })
+      return <span data-testid="reads" />
+    }
+
+    renderConfirm(
+      { createTokenTransfer: async () => ({ updateId: 'u1' }) },
+      () => undefined,
+      () => undefined,
+      <Reads />,
+    )
+    await waitFor(() => assert.equal(detailReads, 1))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => assert.equal(summaryReads, 2))
+    assert.equal(detailReads, 1)
   })
 
   it('exposes the request JSON behind a View data expander', () => {

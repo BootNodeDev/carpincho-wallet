@@ -29,7 +29,7 @@ export const AssetsPanel = ({
   const vault = useVault()
   const activeAccount = account ?? vault.primary ?? vault.accounts[0]
   const [selected, setSelected] = useState<TokenHoldingSummary | null>(null)
-  const { summaries, loading, error, refresh } = useTokenHoldings(activeAccount, { api })
+  const { summaries, loading, error } = useTokenHoldings(activeAccount, { api })
 
   if (activeAccount === undefined) {
     return (
@@ -81,9 +81,6 @@ export const AssetsPanel = ({
           summary={selected}
           holdingsApi={api}
           sendApi={sendApi}
-          onSent={() => {
-            void refresh()
-          }}
         />
       )}
     </div>

@@ -180,13 +180,23 @@ describe('HomeTabs navigation', () => {
     const holdingsApi: Cip56HoldingsApi = {
       listTokenHoldingSummaries: async () => [],
     }
+    let resolveCreate: (() => void) | undefined
+    const preapprovalApi = {
+      ...inactivePreapprovalApi,
+      createAmuletPreapproval: async () => {
+        await new Promise<void>((resolve) => {
+          resolveCreate = resolve
+        })
+        return { updateId: 'noop' }
+      },
+    }
 
     renderHome(
       baseVault(),
       <HomeTabs
         transactions={[]}
         tokensApi={holdingsApi}
-        preapprovalApi={inactivePreapprovalApi}
+        preapprovalApi={preapprovalApi}
       />,
     )
 
@@ -200,6 +210,12 @@ describe('HomeTabs navigation', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Assets' }))
 
     const toggleAfter = await screen.findByRole('switch', { name: 'Auto-accept incoming' })
+    assert.equal(toggleAfter.getAttribute('aria-checked'), 'true')
+
+    // The refreshed status still reports no preapproval, so the settled command must not
+    // flip the switch back off under its own success toast.
+    resolveCreate?.()
+    await waitFor(() => assert.equal(toggleAfter.hasAttribute('disabled'), false))
     assert.equal(toggleAfter.getAttribute('aria-checked'), 'true')
   })
 
