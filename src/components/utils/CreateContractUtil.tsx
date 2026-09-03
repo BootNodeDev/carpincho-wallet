@@ -34,27 +34,20 @@ export const CreateContractUtil = ({
         signMessage: vault.signMessage,
         recordTransaction: vault.recordTransaction,
       }),
+    onSuccess: () => toast.success('Contract created'),
+    onError: (err) => toast.error(err.message),
   })
   const busy = submit.isPending
   // A resubmit clears the previous id rather than leaving a stale one under the form.
   const updateId = busy ? undefined : submit.data?.updateId
   const canSubmit = templateId.trim() !== '' && jsonValid && !busy
 
-  const onSubmit = async (): Promise<void> => {
-    try {
-      await submit.mutateAsync()
-      toast.success('Contract created')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    }
-  }
-
   return (
     <form
       className="flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault()
-        void onSubmit()
+        submit.mutate()
       }}
     >
       <label
