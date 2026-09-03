@@ -1,7 +1,12 @@
-import { DIRECT_CONNECTED_ORIGINS_KEY, storedOrigins } from '@/extension/directConnections'
+import {
+  clearDirectConnectedOrigins,
+  DIRECT_CONNECTED_ORIGINS_KEY,
+  storedOrigins,
+} from '@/extension/directConnections'
 import {
   jsonRpcError,
   jsonRpcResult,
+  type RuntimeDisconnectDapps,
   type RuntimeForgetConnectedOrigin,
   type RuntimeGetConnectedOrigins,
   type RuntimeGetPendingRequests,
@@ -79,6 +84,18 @@ export const forgetConnectedOrigin = async (origin: string): Promise<string[]> =
     type: 'CARPINCHO_FORGET_CONNECTED_ORIGIN',
     origin,
   } satisfies RuntimeForgetConnectedOrigin)
+
+// Vault reset. Off the extension there is nobody to tell, so it just drops the in-memory
+// origins the fallback keeps.
+export const disconnectAllDapps = async (): Promise<void> => {
+  if (!isExtensionRuntime()) {
+    await clearDirectConnectedOrigins()
+    return
+  }
+  await sendRuntimeMessage<unknown>({
+    type: 'CARPINCHO_DISCONNECT_DAPPS',
+  } satisfies RuntimeDisconnectDapps)
+}
 
 export const createRuntimeResponder = (pending: RuntimePendingRequest): ProviderResponder => ({
   result: async (value) => {

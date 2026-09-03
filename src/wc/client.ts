@@ -4,6 +4,7 @@ import SignClient from '@walletconnect/sign-client'
 import type { SignClientTypes } from '@walletconnect/types'
 import { getSdkError } from '@walletconnect/utils'
 import { getWalletServiceNetworkId } from '@/api/walletService'
+import { CIP103_EVENTS } from '@/provider/events'
 import type { ProviderResponder } from '@/provider/types'
 
 const CANTON_NAMESPACE = 'canton'
@@ -45,8 +46,6 @@ export const CIP103_METHODS = [
   CANTON_METHOD_SIGN_MESSAGE,
   ...LEGACY_CANTON_METHODS,
 ]
-
-export const CIP103_EVENTS = ['accountsChanged', 'statusChanged', 'txChanged']
 
 const getWalletConnectProjectId = (): string =>
   ((import.meta.env.VITE_WC_PROJECT_ID as string | undefined) ?? '').trim()
@@ -127,7 +126,7 @@ export const approveProposal = async (args: {
         accounts: [`${chain}:${encodeURIComponent(args.partyId)}`],
         chains: [chain],
         methods: CIP103_METHODS,
-        events: CIP103_EVENTS,
+        events: [...CIP103_EVENTS],
       },
     },
   })

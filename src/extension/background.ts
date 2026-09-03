@@ -3,27 +3,30 @@ import {
   normalizeDirectConnectionOrigin,
 } from '@/extension/directConnectionState'
 import {
+  clearDirectConnectedOrigins,
   forgetDirectConnectedOrigin,
   readDirectConnectedOrigins,
   rememberDirectConnectedOrigin,
 } from '@/extension/directConnections'
 import { createDirectProviderResponse } from '@/extension/directProvider'
 import {
-  CARPINCHO_PROVIDER_ID,
   type JsonRpcRequest,
   type JsonRpcResponse,
   jsonRpcError,
   type RuntimeBroadcastEvent,
+  type RuntimeDisconnectDapps,
   type RuntimeEventRelay,
   type RuntimeForgetConnectedOrigin,
   type RuntimeGetConnectedOrigins,
   type RuntimeGetPendingRequests,
+  type RuntimeOpenWallet,
   type RuntimePendingRequest,
   type RuntimePendingRequestMessage,
   type RuntimeProviderRequest,
   type RuntimeProviderResponse,
 } from '@/extension/messages'
 import { readWalletSnapshot } from '@/extension/walletSnapshot'
+import { type Cip103Event, statusChangedPayload } from '@/provider/events'
 
 type RuntimeMessage =
   | RuntimeProviderRequest
@@ -32,6 +35,8 @@ type RuntimeMessage =
   | RuntimeGetConnectedOrigins
   | RuntimeForgetConnectedOrigin
   | RuntimeBroadcastEvent
+  | RuntimeOpenWallet
+  | RuntimeDisconnectDapps
 
 type RuntimeSender = {
   tab?: {
@@ -99,57 +104,51 @@ const chromeApi = (
   }
 ).chrome
 
+type Tab = { id?: number }
+
+const tabsForOrigins = async (origins: string[]): Promise<Tab[]> =>
+  origins.length === 0
+    ? []
+    : ((await chromeApi?.tabs?.query({ url: origins.map((o) => `${o}/*`) }).catch(() => [])) ?? [])
+
+const sendToTab = async (tab: Tab, eventName: Cip103Event, payload: unknown): Promise<void> => {
+  if (tab.id === undefined) {
+    return
+  }
+  const relay: RuntimeEventRelay = { type: 'CARPINCHO_EVENT_RELAY', eventName, payload }
+  await chromeApi?.tabs?.sendMessage(tab.id, relay).catch(() => undefined)
+}
+
 // Wallet → page events go only to dApps the user has connected, never to every
 // injected tab, so unconnected origins cannot observe wallet activity.
 const relayBroadcastToTabs = async (message: RuntimeBroadcastEvent): Promise<void> => {
-  const origins = await readDirectConnectedOrigins().catch((): string[] => [])
-  if (origins.length === 0) {
-    return
-  }
-  const tabs = await chromeApi?.tabs
-    ?.query({ url: origins.map((origin) => `${origin}/*`) })
-    .catch(() => [])
-  if (tabs === undefined) {
-    return
-  }
-  const relay: RuntimeEventRelay = {
-    type: 'CARPINCHO_EVENT_RELAY',
-    eventName: message.eventName,
-    payload: message.payload,
-  }
+  const tabs = await tabsForOrigins(await readDirectConnectedOrigins().catch((): string[] => []))
+  await Promise.all(tabs.map((tab) => sendToTab(tab, message.eventName, message.payload)))
+}
+
+// A wallet-initiated disconnect. Emptying the accounts first is the whole difference between
+// this and a lock, which pushes `statusChanged` alone: a dApp watching for a party can then
+// tell the two apart. Chained per tab, so one unresponsive dApp cannot hold up the pair for
+// every other one.
+const relayDisconnectToTabs = async (tabs: Tab[]): Promise<void> => {
   await Promise.all(
-    tabs.map((tab) => {
-      if (tab.id === undefined) {
-        return Promise.resolve()
-      }
-      return chromeApi?.tabs?.sendMessage(tab.id, relay).catch(() => undefined)
+    tabs.map(async (tab) => {
+      await sendToTab(tab, 'accountsChanged', [])
+      await sendToTab(tab, 'statusChanged', statusChangedPayload(false))
     }),
   )
 }
 
-// A wallet-initiated disconnect targets one origin directly: the general relay reads the
-// connected-origins list this disconnect is about to leave, and must not reach other dApps.
 const relayDisconnectToOrigin = async (origin: string): Promise<void> => {
-  const tabs = await chromeApi?.tabs?.query({ url: `${origin}/*` }).catch(() => [])
-  if (tabs === undefined) {
-    return
-  }
-  const relay: RuntimeEventRelay = {
-    type: 'CARPINCHO_EVENT_RELAY',
-    eventName: 'statusChanged',
-    payload: {
-      provider: { id: CARPINCHO_PROVIDER_ID, providerType: 'browser' },
-      connection: { isConnected: false, isNetworkConnected: true },
-    },
-  }
-  await Promise.all(
-    tabs.map((tab) => {
-      if (tab.id === undefined) {
-        return Promise.resolve()
-      }
-      return chromeApi?.tabs?.sendMessage(tab.id, relay).catch(() => undefined)
-    }),
-  )
+  await relayDisconnectToTabs(await tabsForOrigins([origin]))
+}
+
+// Every connected dApp at once, for a vault reset. Relaying and forgetting both happen here,
+// in that order: a popup that cleared the origins itself would leave this with nobody to tell.
+const disconnectEveryDapp = async (): Promise<void> => {
+  const origins = await readDirectConnectedOrigins().catch((): string[] => [])
+  await relayDisconnectToTabs(await tabsForOrigins(origins))
+  await clearDirectConnectedOrigins().catch(() => undefined)
 }
 
 const pendingRequests = new Map<
@@ -208,11 +207,14 @@ const updateActionBadge = async (): Promise<void> => {
 // Chrome only allows `action.openPopup` from a gesture-carrying event, and the window focused
 // when a dApp request lands is the SDK's toolbar-less picker, so the toolbar popup cannot be
 // opened from here. The wallet gets its own popup window instead, one at a time: `id` is the
-// window on screen, `opening` a create still in flight.
-const approvalWindow: { id?: number; opening?: Promise<void> } = {}
+// window on screen, `opening` a create still in flight. Answering the queued requests closes
+// a window the wallet opened for them, so `keepOpen` marks one a dApp asked to have on screen
+// through `sdk.open()`. It rides on the window, not on whoever opened it: a dApp can ask while
+// a request window is already up, and that window must then survive the answer.
+const walletWindow: { id?: number; opening?: Promise<void>; keepOpen?: boolean } = {}
 
-const APPROVAL_WINDOW_WIDTH = 420
-const APPROVAL_WINDOW_HEIGHT = 640
+const WALLET_WINDOW_WIDTH = 420
+const WALLET_WINDOW_HEIGHT = 640
 
 const holds = (area: DisplayBounds, x: number, y: number): boolean =>
   x >= area.left && x < area.left + area.width && y >= area.top && y < area.top + area.height
@@ -230,7 +232,7 @@ const workAreas = async (): Promise<Array<{ area: DisplayBounds; isPrimary: bool
 // Centers the window on the display the user is actually on, which is the one holding the
 // middle of the focused browser window. Falls back to the primary display, and then to
 // undefined, meaning nothing to measure so Chrome picks the spot.
-const approvalWindowCenter = async (): Promise<{ left: number; top: number } | undefined> => {
+const walletWindowCenter = async (): Promise<{ left: number; top: number } | undefined> => {
   try {
     const [displays, focused] = await Promise.all([
       workAreas(),
@@ -246,60 +248,63 @@ const approvalWindowCenter = async (): Promise<{ left: number; top: number } | u
       displays.find((display) => display.isPrimary) ??
       displays[0]
     return {
-      left: Math.max(Math.round(area.left + (area.width - APPROVAL_WINDOW_WIDTH) / 2), 0),
-      top: Math.max(Math.round(area.top + (area.height - APPROVAL_WINDOW_HEIGHT) / 2), 0),
+      left: Math.max(Math.round(area.left + (area.width - WALLET_WINDOW_WIDTH) / 2), 0),
+      top: Math.max(Math.round(area.top + (area.height - WALLET_WINDOW_HEIGHT) / 2), 0),
     }
   } catch {
     return undefined
   }
 }
 
-const createApprovalWindow = async (): Promise<void> => {
+const createWalletWindow = async (): Promise<void> => {
   try {
     const created = await chromeApi?.windows?.create({
       url: chromeApi?.runtime?.getURL('index.html') ?? 'index.html',
       type: 'popup',
       focused: true,
-      width: APPROVAL_WINDOW_WIDTH,
-      height: APPROVAL_WINDOW_HEIGHT,
-      ...(await approvalWindowCenter()),
+      width: WALLET_WINDOW_WIDTH,
+      height: WALLET_WINDOW_HEIGHT,
+      ...(await walletWindowCenter()),
     })
     if (created?.id === undefined) {
       return
     }
     // Every request this window was for got answered while the create was still in flight
     // (the toolbar popup was already open, say): close it rather than pop it up over nothing.
-    if (pendingRequests.size === 0) {
+    if (!walletWindow.keepOpen && pendingRequests.size === 0) {
       await chromeApi?.windows?.remove(created.id)
       return
     }
-    approvalWindow.id = created.id
+    walletWindow.id = created.id
   } finally {
-    approvalWindow.opening = undefined
+    walletWindow.opening = undefined
   }
 }
 
-const openApprovalWindow = async (): Promise<void> => {
+const openWalletWindow = async (): Promise<void> => {
   // Claimed synchronously: two requests landing in the same tick must not each open a window.
-  if (approvalWindow.opening === undefined && approvalWindow.id === undefined) {
-    approvalWindow.opening = createApprovalWindow()
-    return approvalWindow.opening
+  if (walletWindow.opening !== undefined || walletWindow.id !== undefined) {
+    await walletWindow.opening
+    const { id } = walletWindow
+    if (id !== undefined) {
+      await chromeApi?.windows?.update(id, { focused: true })
+      return
+    }
+    // The create this waited on closed its own window again. Nothing is on screen, so fall
+    // through and open one.
   }
-  await approvalWindow.opening
-  const { id } = approvalWindow
-  if (id !== undefined) {
-    await chromeApi?.windows?.update(id, { focused: true })
-  }
+  walletWindow.opening = createWalletWindow()
+  await walletWindow.opening
 }
 
 // Forgets the window before removing it so the `onRemoved` listener does not read a close
 // the wallet asked for as the user dismissing the prompt.
-const closeApprovalWindow = async (): Promise<void> => {
-  const { id } = approvalWindow
-  approvalWindow.id = undefined
-  if (id === undefined) {
+const closeWalletWindow = async (): Promise<void> => {
+  const { id, keepOpen } = walletWindow
+  if (id === undefined || keepOpen === true) {
     return
   }
+  walletWindow.id = undefined
   await chromeApi?.windows?.remove(id)
 }
 
@@ -321,7 +326,7 @@ const queueProviderRequest = async (
   // Nothing here depends on the others, and the window is what the user is waiting for:
   // pushing to already-open views must not delay it.
   await Promise.all([
-    openApprovalWindow().catch(() => undefined),
+    openWalletWindow().catch(() => undefined),
     updateActionBadge().catch(() => undefined),
     notifyWalletViews(pending),
   ])
@@ -374,17 +379,54 @@ const handleProviderRequest = async (
   await queueProviderRequest(message, sendResponse)
 }
 
-chromeApi?.windows?.onRemoved.addListener((windowId) => {
-  if (windowId !== approvalWindow.id) {
+// Any script on a connected page can post the message this arrives as, and each one would
+// raise the wallet over whatever the user is doing. Per origin, so one page cannot spend
+// another dApp's turn, and checked before the origin lookup so a loop costs no storage reads.
+const OPEN_WALLET_THROTTLE_MS = 1000
+const lastOpenWalletAt = new Map<string, number>()
+
+// `sdk.open()`, from a dApp the user has already connected. An origin the user never approved
+// gets nothing: opening a window is visible to the user, and an unconnected page has no
+// business doing it.
+const handleOpenWallet = async (message: RuntimeOpenWallet): Promise<void> => {
+  const now = Date.now()
+  if (now - (lastOpenWalletAt.get(message.origin) ?? 0) < OPEN_WALLET_THROTTLE_MS) {
     return
   }
-  approvalWindow.id = undefined
+  lastOpenWalletAt.set(message.origin, now)
+  if (!(await isOriginConnected(message.origin))) {
+    return
+  }
+  // On the window, not on this call: a dApp can ask while a request window is already up.
+  walletWindow.keepOpen = true
+  await openWalletWindow()
+}
+
+chromeApi?.windows?.onRemoved.addListener((windowId) => {
+  if (windowId !== walletWindow.id) {
+    return
+  }
+  walletWindow.id = undefined
+  walletWindow.keepOpen = undefined
   rejectPendingRequests()
 })
 
 chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'CARPINCHO_PROVIDER_REQUEST') {
     void handleProviderRequest(message, sendResponse)
+    return true
+  }
+
+  if (message.type === 'CARPINCHO_OPEN_WALLET') {
+    void handleOpenWallet(message).catch(() => undefined)
+    sendResponse({ ok: true })
+    return false
+  }
+
+  if (message.type === 'CARPINCHO_DISCONNECT_DAPPS') {
+    void disconnectEveryDapp()
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }))
     return true
   }
 
@@ -430,7 +472,7 @@ chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
     ).catch(() => undefined)
     void updateActionBadge().catch(() => undefined)
     if (pendingRequests.size === 0) {
-      void closeApprovalWindow().catch(() => undefined)
+      void closeWalletWindow().catch(() => undefined)
     }
     sendResponse({ ok: true })
     return false

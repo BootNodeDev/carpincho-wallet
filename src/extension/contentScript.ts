@@ -7,6 +7,7 @@ const WalletEvent = {
   SPLICE_WALLET_RESPONSE: 'SPLICE_WALLET_RESPONSE',
   SPLICE_WALLET_EXT_READY: 'SPLICE_WALLET_EXT_READY',
   SPLICE_WALLET_EXT_ACK: 'SPLICE_WALLET_EXT_ACK',
+  SPLICE_WALLET_EXT_OPEN: 'SPLICE_WALLET_EXT_OPEN',
 } as const
 
 const CANTON_REQUEST_PROVIDER_EVENT = 'canton:requestProvider'
@@ -36,6 +37,11 @@ interface RuntimeProviderRequest {
   origin: string
 }
 
+interface RuntimeOpenWallet {
+  type: 'CARPINCHO_OPEN_WALLET'
+  origin: string
+}
+
 interface SpliceWalletRequestMessage {
   type: typeof WalletEvent.SPLICE_WALLET_REQUEST
   request: JsonRpcRequest
@@ -51,19 +57,15 @@ interface SpliceWalletResponseMessage {
   response: JsonRpcResponse
 }
 
-interface SpliceWalletReadyMessage {
-  type: typeof WalletEvent.SPLICE_WALLET_EXT_READY
-  target?: string
-}
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
 const isForCarpincho = (message: { target?: unknown }): boolean =>
   message.target === undefined || message.target === CARPINCHO_PROVIDER_ID
 
-const isSpliceWalletReady = (value: unknown): value is SpliceWalletReadyMessage =>
-  isRecord(value) && value.type === WalletEvent.SPLICE_WALLET_EXT_READY
+// The bodiless page messages: only `type` and `target` matter on either.
+const isWalletMessage = (value: unknown, type: string): value is { target?: string } =>
+  isRecord(value) && value.type === type
 
 const isSpliceWalletRequest = (value: unknown): value is SpliceWalletCallMessage =>
   isRecord(value) &&
@@ -104,7 +106,7 @@ type RuntimeApi = {
   id: string
   lastError?: { message?: string }
   sendMessage: (
-    message: RuntimeProviderRequest,
+    message: RuntimeProviderRequest | RuntimeOpenWallet,
     callback: (response?: JsonRpcResponse) => void,
   ) => void
   onMessage?: {
@@ -154,6 +156,12 @@ const runtimeRequest = async (message: RuntimeProviderRequest): Promise<JsonRpcR
     })
   })
 
+// Fire and forget: `sdk.open()` waits for nothing. The callback is there to read
+// `runtime.lastError`, which is what stops Chrome logging it into the dApp's console.
+const runtimeNotify = (message: RuntimeOpenWallet): void => {
+  runtime?.sendMessage(message, () => runtime?.lastError)
+}
+
 const postResponse = (response: JsonRpcResponse): void => {
   const message: SpliceWalletResponseMessage = {
     type: WalletEvent.SPLICE_WALLET_RESPONSE,
@@ -193,8 +201,14 @@ window.addEventListener('message', (event) => {
     return
   }
   const data = event.data as unknown
-  if (isSpliceWalletReady(data) && isForCarpincho(data)) {
+  if (isWalletMessage(data, WalletEvent.SPLICE_WALLET_EXT_READY) && isForCarpincho(data)) {
     window.postMessage(extensionAck(), '*')
+    return
+  }
+  // `sdk.open()`. It sends the `userUrl` it read from status; the background opens its own
+  // page instead, so nothing here reads that field.
+  if (isWalletMessage(data, WalletEvent.SPLICE_WALLET_EXT_OPEN) && isForCarpincho(data)) {
+    runtimeNotify({ type: 'CARPINCHO_OPEN_WALLET', origin: window.location.origin })
     return
   }
   if (!isSpliceWalletRequest(data) || !isForCarpincho(data)) {

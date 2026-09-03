@@ -3,6 +3,7 @@
 // No-op on the web variant where chrome.runtime is undefined.
 
 import type { RuntimeBroadcastEvent } from '@/extension/messages'
+import type { Cip103Event } from '@/provider/events'
 
 type RuntimeApi = {
   sendMessage: (message: RuntimeBroadcastEvent) => Promise<unknown>
@@ -10,7 +11,12 @@ type RuntimeApi = {
 
 const runtime = (globalThis as { chrome?: { runtime?: RuntimeApi } }).chrome?.runtime
 
-export const broadcastWalletEvent = async (eventName: string, payload: unknown): Promise<void> => {
+// `Cip103Event`, not `string`: the WalletConnect session declares that same list, so an event
+// this pushes is one every dApp was told to expect, whichever transport it arrived on.
+export const broadcastWalletEvent = async (
+  eventName: Cip103Event,
+  payload: unknown,
+): Promise<void> => {
   if (runtime === undefined) {
     return
   }

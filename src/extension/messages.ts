@@ -1,3 +1,5 @@
+import type { Cip103Event } from '@/provider/events'
+
 export const CARPINCHO_PROVIDER_ID = 'carpincho-wallet'
 export const CARPINCHO_PROVIDER_NAME = 'Carpincho Wallet'
 
@@ -68,6 +70,13 @@ export interface RuntimeProviderResponse {
   response: JsonRpcResponse
 }
 
+// Page → content script → background: the dApp called `sdk.open()`. Carries the asking
+// origin, not the URL the page sent, which the background never reads.
+export interface RuntimeOpenWallet {
+  type: 'CARPINCHO_OPEN_WALLET'
+  origin: string
+}
+
 export interface RuntimeGetPendingRequests {
   type: 'CARPINCHO_GET_PENDING_REQUESTS'
 }
@@ -82,16 +91,22 @@ export interface RuntimeForgetConnectedOrigin {
   origin: string
 }
 
-// Wallet→page broadcast: popup → background → content script → page.
+// Popup → background: disconnect every connected dApp and forget them all, for a vault reset.
+export interface RuntimeDisconnectDapps {
+  type: 'CARPINCHO_DISCONNECT_DAPPS'
+}
+
+// Wallet→page broadcast: popup → background → content script → page. `eventName` is typed by
+// the shared CIP-0103 list the WalletConnect session declares.
 export interface RuntimeBroadcastEvent {
   type: 'CARPINCHO_BROADCAST_EVENT'
-  eventName: string
+  eventName: Cip103Event
   payload: unknown
 }
 
 export interface RuntimeEventRelay {
   type: 'CARPINCHO_EVENT_RELAY'
-  eventName: string
+  eventName: Cip103Event
   payload: unknown
 }
 

@@ -11,11 +11,12 @@ import {
   useState,
 } from 'react'
 import { clearMirroredRuntimeConfig } from '@/config/runtimeConfig'
-import { clearDirectConnectedOrigins } from '@/extension/directConnections'
 import { broadcastWalletEvent } from '@/extension/eventBroadcast'
+import { disconnectAllDapps } from '@/extension/runtimeClient'
 import { persistWalletSnapshot } from '@/extension/walletSnapshot'
 import { useNetwork } from '@/network/useNetwork'
 import { accountToCip103Wallet } from '@/provider/accounts'
+import { statusChangedPayload } from '@/provider/events'
 import { parseBackupContainer, wrapBackup } from '@/vault/backup'
 import { assertSecureContext, decryptVault, encryptVault } from '@/vault/crypto'
 import { derivePublicKeyBase64, signMessageBase64 } from '@/vault/keypair'
@@ -156,20 +157,17 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
 
   const bump = useCallback((): void => setTick((t) => t + 1), [])
 
-  // dapp-api lifecycle events: `connected` on unlock, `statusChanged` on every
-  // transition. isNetworkConnected stays true (Carpincho always targets the
-  // configured wallet-service; reachability surfaces through later RPC calls).
+  // dapp-api lifecycle events: `connected` on unlock, `statusChanged` on every transition.
   const broadcastConnectionState = useCallback((isConnected: boolean): void => {
-    const connection = { isConnected, isNetworkConnected: true }
+    const payload = statusChangedPayload(isConnected)
     if (isConnected) {
-      void broadcastWalletEvent('connected', connection)
+      void broadcastWalletEvent('connected', payload.connection)
     }
-    void broadcastWalletEvent('statusChanged', {
-      provider: { id: 'carpincho-wallet', providerType: 'browser' },
-      connection,
-    })
+    void broadcastWalletEvent('statusChanged', payload)
   }, [])
 
+  // No `accountsChanged`: the accounts still exist, they are only out of reach. That is what
+  // tells a dApp this is a lock and not a disconnect, which empties the list first.
   const lock = useCallback((): void => {
     void wipeMemory().catch(() => undefined)
     setIsLocked(true)
@@ -248,9 +246,14 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     // the snapshot, WalletConnect's IndexedDB sessions, and the direct connected origins in
     // chrome.storage.session. The carpincho localStorage prefix wipe only covers localStorage.
     await wipeMemory().catch(() => undefined)
-    await persistWalletSnapshot(null).catch(() => undefined)
-    await wipeWalletConnectStorage().catch(() => undefined)
-    await clearDirectConnectedOrigins().catch(() => undefined)
+    // Independent of each other, and the disconnect now waits on the worker messaging every
+    // connected tab, which the user should not sit through one step at a time. A reset is a
+    // disconnect, not a lock: the accounts are gone, not just out of reach.
+    await Promise.all([
+      persistWalletSnapshot(null).catch(() => undefined),
+      wipeWalletConnectStorage().catch(() => undefined),
+      disconnectAllDapps().catch(() => undefined),
+    ])
     wipeAllPersistedData()
     // After the localStorage wipe: a config read during the await would otherwise re-mirror it.
     await clearMirroredRuntimeConfig().catch(() => undefined)
@@ -259,9 +262,8 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     setVaultExists(false)
     setIsLocked(true)
     bump()
-    broadcastConnectionState(false)
     window.location.reload()
-  }, [bump, broadcastConnectionState])
+  }, [bump])
 
   // The one scoping of the stored accounts: the UI projection and the dapp-api payload both
   // read it, so what a dApp is offered can never drift from what the wallet shows. Empty while

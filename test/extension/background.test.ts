@@ -68,6 +68,12 @@ const resetWindowCalls = (): void => {
   windowStub.noFocusedWindow = false
 }
 
+// Long enough for any background work a message kicked off to finish, when the assertion is
+// that nothing happened and there is no state to wait on.
+const settle = async (): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve, 25))
+}
+
 const waitFor = async (done: () => boolean): Promise<void> => {
   for (let attempt = 0; attempt < 200 && !done(); attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5))
@@ -167,7 +173,7 @@ after(() => {
 })
 
 describe('background: CARPINCHO_FORGET_CONNECTED_ORIGIN', () => {
-  it('tells the forgotten dApp it is disconnected, then forgets it', async () => {
+  it('empties the accounts before saying disconnected, then forgets the origin', async () => {
     assert.ok(listener)
     let response: unknown
     listener(
@@ -180,12 +186,18 @@ describe('background: CARPINCHO_FORGET_CONNECTED_ORIGIN', () => {
     await waitFor(() => response !== undefined)
 
     // The relay went to that origin's tabs only, before the forget could filter it out
-    assert.deepEqual(queried, ['http://localhost:3012/*'])
-    assert.equal(relayed.length, 1)
-    assert.equal(relayed[0].tabId, 7)
+    assert.deepEqual(queried, [['http://localhost:3012/*']])
+    assert.deepEqual(
+      relayed.map((entry) => entry.tabId),
+      [7, 7],
+    )
+    // Empty accounts first: that ordering is how a dApp tells a disconnect from a lock,
+    // which pushes statusChanged on its own and leaves the accounts alone.
     assert.equal(relayed[0].message.type, 'CARPINCHO_EVENT_RELAY')
-    assert.equal(relayed[0].message.eventName, 'statusChanged')
-    assert.deepEqual(relayed[0].message.payload, {
+    assert.equal(relayed[0].message.eventName, 'accountsChanged')
+    assert.deepEqual(relayed[0].message.payload, [])
+    assert.equal(relayed[1].message.eventName, 'statusChanged')
+    assert.deepEqual(relayed[1].message.payload, {
       provider: { id: 'carpincho-wallet', providerType: 'browser' },
       connection: { isConnected: false, isNetworkConnected: true },
     })
@@ -193,6 +205,32 @@ describe('background: CARPINCHO_FORGET_CONNECTED_ORIGIN', () => {
     // The origin is gone from storage and the response carries the remainder
     assert.deepEqual(store[DIRECT_CONNECTED_ORIGINS_KEY], ['http://localhost:4000'])
     assert.deepEqual(response, ['http://localhost:4000'])
+  })
+})
+
+describe('background: CARPINCHO_DISCONNECT_DAPPS', () => {
+  it('tells every connected dApp before forgetting any of them', async () => {
+    assert.ok(listener)
+    relayed.length = 0
+    queried.length = 0
+    store[DIRECT_CONNECTED_ORIGINS_KEY] = ['http://localhost:4000', 'http://localhost:5000']
+
+    let response: unknown
+    listener({ type: 'CARPINCHO_DISCONNECT_DAPPS' }, {}, (r) => {
+      response = r
+    })
+    await waitFor(() => response !== undefined)
+
+    // Read the origins, relayed to their tabs, and only then cleared the list. Clearing it
+    // first (as the popup used to) leaves the relay with nobody to tell.
+    assert.deepEqual(queried, [['http://localhost:4000/*', 'http://localhost:5000/*']])
+    assert.deepEqual(
+      relayed.map((entry) => entry.message.eventName),
+      ['accountsChanged', 'statusChanged'],
+    )
+    assert.deepEqual(relayed[0].message.payload, [])
+    assert.equal(store[DIRECT_CONNECTED_ORIGINS_KEY], undefined)
+    assert.deepEqual(response, { ok: true })
   })
 })
 
@@ -287,6 +325,96 @@ describe('background: answering the last request', () => {
     assert.equal(createdWindows.length, 1)
     assert.deepEqual(removedWindows, [APPROVAL_WINDOW_ID])
     assert.deepEqual(answers[0].result, { isConnected: true })
+  })
+})
+
+const openWallet = (origin: string): void => {
+  assert.ok(listener)
+  listener({ type: 'CARPINCHO_OPEN_WALLET', origin }, {}, () => undefined)
+}
+
+describe('background: CARPINCHO_OPEN_WALLET', () => {
+  before(() => {
+    resetWindowCalls()
+    store[DIRECT_CONNECTED_ORIGINS_KEY] = ['http://localhost:4000']
+  })
+
+  it('ignores an origin the user never connected', async () => {
+    openWallet('http://localhost:9999')
+    await settle()
+
+    assert.deepEqual(createdWindows, [])
+  })
+
+  it('opens the wallet for a connected dApp', async () => {
+    openWallet('http://localhost:4000')
+    await waitFor(() => createdWindows.length >= 1)
+    await settle()
+
+    assert.equal(createdWindows.length, 1)
+    assert.equal(createdWindows[0].url, 'chrome-extension://test/index.html')
+    // Nothing is queued behind this window, so the cleanup that closes a request window
+    // whose requests were answered while it was opening must not touch it.
+    assert.deepEqual(removedWindows, [])
+  })
+
+  it('drops a burst from the same page instead of refocusing on every message', async () => {
+    // Any script on a connected page can post the message behind this. With a window already
+    // up, each one would raise it to the front, so a loop parks the wallet over the user's
+    // screen. The throttle is what stops that: no second focus call.
+    openWallet('http://localhost:4000')
+    openWallet('http://localhost:4000')
+    await settle()
+
+    assert.deepEqual(focusedWindows, [])
+    assert.equal(createdWindows.length, 1)
+  })
+
+  it('leaves that window up when an unrelated request is answered', async () => {
+    const answers: JsonRpcResponse[] = []
+    queueConnect(9, 'http://localhost:9008', answers)
+    await waitFor(() => focusedWindows.length >= 1)
+    answerConnect('9')
+    await settle()
+
+    // The user opened the wallet to look at it. Answering someone else's request is no
+    // reason to take it away, and it was never opened for that request.
+    assert.equal(createdWindows.length, 1)
+    assert.deepEqual(removedWindows, [])
+    assert.deepEqual(answers[0].result, { isConnected: true })
+
+    // Leave the window closed for the next group
+    assert.ok(windowRemoved)
+    windowRemoved(APPROVAL_WINDOW_ID)
+  })
+})
+
+describe('background: sdk.open() while a request window is already up', () => {
+  before(() => {
+    resetWindowCalls()
+    store[DIRECT_CONNECTED_ORIGINS_KEY] = ['http://localhost:4000']
+  })
+
+  it('keeps the window the dApp asked for, though a request opened it', async () => {
+    // "May this window close itself?" belongs to the window, not to whoever opened it. The
+    // request opened this one; the dApp then asked for it, and that has to stick.
+    const answers: JsonRpcResponse[] = []
+    queueConnect(10, 'http://localhost:9009', answers)
+    await waitFor(() => createdWindows.length >= 1)
+
+    // Past the throttle the previous group's open started
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    openWallet('http://localhost:4000')
+    await waitFor(() => focusedWindows.length >= 1)
+
+    answerConnect('10')
+    await settle()
+
+    assert.equal(createdWindows.length, 1)
+    assert.deepEqual(removedWindows, [])
+
+    assert.ok(windowRemoved)
+    windowRemoved(APPROVAL_WINDOW_ID)
   })
 })
 
