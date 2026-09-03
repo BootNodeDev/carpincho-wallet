@@ -84,7 +84,7 @@ export const SendConfirm = ({
       void invalidateTokenState(queryClient, account)
     },
   })
-  const submitError = submit.error === null ? undefined : submit.error.message
+  const submitError = submit.error?.message
 
   const onConfirm = async (): Promise<void> => {
     try {

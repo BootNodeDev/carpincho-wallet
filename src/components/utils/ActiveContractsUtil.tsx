@@ -90,7 +90,7 @@ export const ActiveContractsUtil = ({
   })
   const contracts = query.data ?? []
   const busy = query.isFetching
-  const error = query.error === null ? undefined : query.error.message
+  const error = query.error?.message
 
   // The panel shows the failure inline; the toast is what a user sees from another tab.
   useEffect(() => {
