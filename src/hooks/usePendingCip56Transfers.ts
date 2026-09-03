@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo } from 'react'
 import type { ExecutePreparedResponse } from '@/api/interactiveSubmission'
 import {
   acceptPendingTransfer,
@@ -80,15 +79,12 @@ export const usePendingCip56Transfers = (
   })
   const { mutateAsync: accept, isPending, variables } = acceptMutation
 
-  return useMemo(
-    () => ({
-      transfers,
-      // Initial load only, so poll refetches don't flip the empty state.
-      loading: query.isLoading,
-      ...(error === undefined ? {} : { error }),
-      accept,
-      ...(isPending ? { acceptingCid: variables } : {}),
-    }),
-    [transfers, query.isLoading, error, accept, isPending, variables],
-  )
+  return {
+    transfers,
+    // Initial load only, so poll refetches don't flip the empty state.
+    loading: query.isLoading,
+    ...(error === undefined ? {} : { error }),
+    accept,
+    ...(isPending ? { acceptingCid: variables } : {}),
+  }
 }

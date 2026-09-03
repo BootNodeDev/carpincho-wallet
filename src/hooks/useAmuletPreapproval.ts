@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo } from 'react'
 import type { ExecutePreparedResponse } from '@/api/interactiveSubmission'
 import {
   type AmuletPreapprovalActionParams,
@@ -90,16 +89,13 @@ export const useAmuletPreapproval = (
   // keeps showing what was asked for until a poll agrees with it. A failure drops the claim.
   const requested = isError ? undefined : variables
 
-  return useMemo(
-    () => ({
-      status: query.data,
-      loading: query.isFetching,
-      // Action-in-flight only, so poll refetches don't gate callers' input.
-      busy: isPending,
-      ...(error === undefined ? {} : { error }),
-      toggle,
-      ...(requested === undefined ? {} : { requested }),
-    }),
-    [query.data, query.isFetching, isPending, requested, error, toggle],
-  )
+  return {
+    status: query.data,
+    loading: query.isFetching,
+    // Action-in-flight only, so poll refetches don't gate callers' input.
+    busy: isPending,
+    ...(error === undefined ? {} : { error }),
+    toggle,
+    ...(requested === undefined ? {} : { requested }),
+  }
 }
