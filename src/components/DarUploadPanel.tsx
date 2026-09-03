@@ -52,7 +52,11 @@ export const DarUploadPanel = ({ api = defaultApi }: DarUploadPanelProps): JSX.E
         prompt="Click to choose a .dar file."
         fileName={file?.name ?? null}
         onSelect={(selected) => {
-          upload.reset()
+          // Dropping the last result must not drop an upload in flight: `reset` clears
+          // `isPending` too, which would re-enable the button for a duplicate upload.
+          if (!upload.isPending) {
+            upload.reset()
+          }
           setFile(selected ?? undefined)
         }}
       />

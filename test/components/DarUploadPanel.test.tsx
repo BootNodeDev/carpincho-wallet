@@ -38,4 +38,39 @@ describe('DarUploadPanel', () => {
     assert.equal(uploaded, selectedFile)
     await screen.findByText('token.dar uploaded')
   })
+
+  it('stays disabled when another file is picked mid-upload', async () => {
+    // Scenario: picking a second DAR while the first is still uploading must not re-enable
+    // the button, or the same archive could be pushed twice.
+    let calls = 0
+    let finishUpload: (() => void) | undefined
+
+    render(
+      <DarUploadPanel
+        api={{
+          uploadDarFile: async () => {
+            calls += 1
+            await new Promise<void>((resolve) => {
+              finishUpload = resolve
+            })
+            return { ok: true, vetAllPackages: true, response: {} }
+          },
+        }}
+      />,
+      { wrapper: TestQueryClientProvider },
+    )
+
+    const input = screen.getByLabelText('DAR file')
+    const submit = screen.getByTestId('dar-upload-submit') as HTMLButtonElement
+    await userEvent.upload(input, new File(['first'], 'first.dar'))
+    await userEvent.click(submit)
+    await screen.findByText('Uploading...')
+
+    await userEvent.upload(input, new File(['second'], 'second.dar'))
+    assert.equal(submit.disabled, true)
+
+    finishUpload?.()
+    await screen.findByText('first.dar uploaded')
+    assert.equal(calls, 1)
+  })
 })
