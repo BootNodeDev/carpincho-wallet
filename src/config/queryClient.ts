@@ -16,6 +16,12 @@ export const createQueryClient = (
         retry: false,
         ...queries,
       },
-      mutations,
+      mutations: {
+        // wallet-service can sit on localhost, where the browser reporting itself offline says
+        // nothing about reachability. Without this a write would be parked until the browser
+        // claims a connection again, and its promise would never settle.
+        networkMode: 'always',
+        ...mutations,
+      },
     },
   })
