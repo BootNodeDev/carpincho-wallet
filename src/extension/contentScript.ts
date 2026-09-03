@@ -150,7 +150,9 @@ const announceProvider = (): void => {
   )
 }
 
-const runtimeRequest = async (message: RuntimeProviderRequest): Promise<JsonRpcResponse> =>
+const runtimeRequest = async (
+  message: RuntimeProviderRequest | RuntimeOpenWallet,
+): Promise<JsonRpcResponse> =>
   await new Promise<JsonRpcResponse>((resolve, reject) => {
     if (runtime === undefined) {
       reject(new Error('Carpincho extension runtime is not available'))
@@ -214,10 +216,13 @@ window.addEventListener('message', (event) => {
     return
   }
   if (isSpliceWalletOpen(data) && isForCarpincho(data)) {
-    runtime?.sendMessage(
-      { type: 'CARPINCHO_OPEN_WALLET', origin: window.location.origin },
-      () => undefined,
-    )
+    // Through runtimeRequest so a dead service worker is read off `runtime.lastError` rather
+    // than left for Chrome to log into the dApp's console. There is no reply to post: the
+    // SDK's open() does not wait for one.
+    void runtimeRequest({
+      type: 'CARPINCHO_OPEN_WALLET',
+      origin: window.location.origin,
+    }).catch(() => undefined)
     return
   }
   if (!isSpliceWalletRequest(data) || !isForCarpincho(data)) {

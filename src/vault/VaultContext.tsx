@@ -11,8 +11,8 @@ import {
   useState,
 } from 'react'
 import { clearMirroredRuntimeConfig } from '@/config/runtimeConfig'
-import { clearDirectConnectedOrigins } from '@/extension/directConnections'
 import { broadcastWalletEvent } from '@/extension/eventBroadcast'
+import { disconnectAllDapps } from '@/extension/runtimeClient'
 import { persistWalletSnapshot } from '@/extension/walletSnapshot'
 import { useNetwork } from '@/network/useNetwork'
 import { accountToCip103Wallet } from '@/provider/accounts'
@@ -172,14 +172,6 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     })
   }, [])
 
-  // Destroying the vault is a disconnect, not a lock: the accounts are gone. Emptying the
-  // list first is what lets a dApp tell "ask the user to unlock" from "connect again", since
-  // both end in the same `statusChanged { isConnected: false }`.
-  const broadcastDisconnect = useCallback((): void => {
-    void broadcastWalletEvent('accountsChanged', [])
-    broadcastConnectionState(false)
-  }, [broadcastConnectionState])
-
   const lock = useCallback((): void => {
     void wipeMemory().catch(() => undefined)
     setIsLocked(true)
@@ -260,7 +252,10 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     await wipeMemory().catch(() => undefined)
     await persistWalletSnapshot(null).catch(() => undefined)
     await wipeWalletConnectStorage().catch(() => undefined)
-    await clearDirectConnectedOrigins().catch(() => undefined)
+    // Tells every connected dApp it is disconnected, then forgets them. A reset is a
+    // disconnect, not a lock: the accounts are gone, so the empty `accountsChanged` this
+    // sends is what stops a dApp from waiting for an unlock that will never come.
+    await disconnectAllDapps().catch(() => undefined)
     wipeAllPersistedData()
     // After the localStorage wipe: a config read during the await would otherwise re-mirror it.
     await clearMirroredRuntimeConfig().catch(() => undefined)
@@ -269,9 +264,8 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     setVaultExists(false)
     setIsLocked(true)
     bump()
-    broadcastDisconnect()
     window.location.reload()
-  }, [bump, broadcastDisconnect])
+  }, [bump])
 
   // The one scoping of the stored accounts: the UI projection and the dapp-api payload both
   // read it, so what a dApp is offered can never drift from what the wallet shows. Empty while

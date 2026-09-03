@@ -5,9 +5,9 @@ import type { VaultContextValue } from '@/vault/VaultContext'
 
 const originalChrome = (globalThis as { chrome?: unknown }).chrome
 
-type BroadcastEvent = { type: string; eventName: string; payload: unknown }
+type RuntimeMessage = { type: string; eventName?: string; payload?: unknown }
 
-const broadcasts: BroadcastEvent[] = []
+const broadcasts: RuntimeMessage[] = []
 
 type VaultModule = typeof import('@/vault/VaultContext')
 type UseVaultModule = typeof import('@/vault/useVault')
@@ -23,8 +23,12 @@ before(async () => {
     configurable: true,
     value: {
       runtime: {
-        sendMessage: async (message: BroadcastEvent) => {
+        // The popup talks to the background two ways: `sendMessage(message)` for a
+        // fire-and-forget broadcast, `sendMessage(message, callback)` for a call it waits on.
+        sendMessage: (message: RuntimeMessage, callback?: (response?: unknown) => void) => {
           broadcasts.push(message)
+          callback?.({ ok: true })
+          return Promise.resolve()
         },
       },
     },
@@ -66,8 +70,6 @@ const unlockedVault = async (): Promise<{ current: VaultContextValue | null }> =
   return ref
 }
 
-const names = (): string[] => broadcasts.map((event) => event.eventName)
-
 describe('VaultContext lock vs disconnect', () => {
   it('leaves the accounts alone on lock, so a dApp can ask for an unlock', async () => {
     const ref = await unlockedVault()
@@ -76,21 +78,29 @@ describe('VaultContext lock vs disconnect', () => {
       ref.current?.lock()
     })
 
-    assert.deepEqual(names(), ['statusChanged'])
+    assert.deepEqual(
+      broadcasts.map((message) => message.eventName),
+      ['statusChanged'],
+    )
     assert.deepEqual((broadcasts[0].payload as { connection: unknown }).connection, {
       isConnected: false,
       isNetworkConnected: true,
     })
   })
 
-  it('empties the accounts before saying disconnected when the vault is destroyed', async () => {
+  it('hands a destroy to the background, which disconnects before it forgets', async () => {
     const ref = await unlockedVault()
 
     await act(async () => {
       await ref.current?.destroyVault()
     })
 
-    assert.deepEqual(names(), ['accountsChanged', 'statusChanged'])
-    assert.deepEqual(broadcasts[0].payload, [])
+    // Not two broadcasts from here: the popup clearing the connected origins itself would
+    // leave the disconnect with nobody to tell, so the background does both halves in order.
+    // What it sends is covered in test/extension/background.test.ts.
+    assert.deepEqual(
+      broadcasts.map((message) => message.type),
+      ['CARPINCHO_DISCONNECT_DAPPS'],
+    )
   })
 })

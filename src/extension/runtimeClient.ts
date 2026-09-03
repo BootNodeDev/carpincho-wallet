@@ -1,7 +1,12 @@
-import { DIRECT_CONNECTED_ORIGINS_KEY, storedOrigins } from '@/extension/directConnections'
+import {
+  clearDirectConnectedOrigins,
+  DIRECT_CONNECTED_ORIGINS_KEY,
+  storedOrigins,
+} from '@/extension/directConnections'
 import {
   jsonRpcError,
   jsonRpcResult,
+  type RuntimeDisconnectDapps,
   type RuntimeForgetConnectedOrigin,
   type RuntimeGetConnectedOrigins,
   type RuntimeGetPendingRequests,
@@ -79,6 +84,19 @@ export const forgetConnectedOrigin = async (origin: string): Promise<string[]> =
     type: 'CARPINCHO_FORGET_CONNECTED_ORIGIN',
     origin,
   } satisfies RuntimeForgetConnectedOrigin)
+
+// Vault reset: tell every connected dApp it is disconnected, then forget them all. The
+// background owns both halves so the disconnect still has an audience when it runs. Off the
+// extension there is nothing to tell, so this just drops the in-memory origins.
+export const disconnectAllDapps = async (): Promise<void> => {
+  if (!isExtensionRuntime()) {
+    await clearDirectConnectedOrigins()
+    return
+  }
+  await sendRuntimeMessage<unknown>({
+    type: 'CARPINCHO_DISCONNECT_DAPPS',
+  } satisfies RuntimeDisconnectDapps)
+}
 
 export const createRuntimeResponder = (pending: RuntimePendingRequest): ProviderResponder => ({
   result: async (value) => {

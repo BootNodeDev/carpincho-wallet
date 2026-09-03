@@ -92,6 +92,13 @@ export interface RuntimeForgetConnectedOrigin {
   origin: string
 }
 
+// Popup → background: disconnect every connected dApp and forget them all, for a vault reset.
+// The background does both halves, in that order, because a popup that cleared the origin
+// list itself would leave the disconnect with nobody left to tell.
+export interface RuntimeDisconnectDapps {
+  type: 'CARPINCHO_DISCONNECT_DAPPS'
+}
+
 // Wallet→page broadcast: popup → background → content script → page. `eventName` is typed by
 // the shared CIP-0103 list the WalletConnect session declares, so this path cannot push an
 // event a dApp was never told to expect.

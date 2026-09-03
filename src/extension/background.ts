@@ -3,6 +3,7 @@ import {
   normalizeDirectConnectionOrigin,
 } from '@/extension/directConnectionState'
 import {
+  clearDirectConnectedOrigins,
   forgetDirectConnectedOrigin,
   readDirectConnectedOrigins,
   rememberDirectConnectedOrigin,
@@ -14,6 +15,7 @@ import {
   type JsonRpcResponse,
   jsonRpcError,
   type RuntimeBroadcastEvent,
+  type RuntimeDisconnectDapps,
   type RuntimeEventRelay,
   type RuntimeForgetConnectedOrigin,
   type RuntimeGetConnectedOrigins,
@@ -35,6 +37,7 @@ type RuntimeMessage =
   | RuntimeForgetConnectedOrigin
   | RuntimeBroadcastEvent
   | RuntimeOpenWallet
+  | RuntimeDisconnectDapps
 
 type RuntimeSender = {
   tab?: {
@@ -134,30 +137,40 @@ const relayBroadcastToTabs = async (message: RuntimeBroadcastEvent): Promise<voi
   await sendToTabs(tabs, message.eventName, message.payload)
 }
 
-// One relay at a time, so two events the wallet sent in order arrive in that order. A
-// disconnect's empty account list has to land before its `statusChanged`, and each relay
-// awaits storage and a tab query before it sends anything.
-let relayQueue: Promise<void> = Promise.resolve()
-
-const queueRelay = (run: () => Promise<void>): Promise<void> => {
-  relayQueue = relayQueue.then(run).catch(() => undefined)
-  return relayQueue
-}
-
-// A wallet-initiated disconnect targets one origin directly: the general relay reads the
-// connected-origins list this disconnect is about to leave, and must not reach other dApps.
-// Emptying the accounts first is the whole difference between this and a lock, which pushes
-// `statusChanged` alone: a dApp watching for a party can then tell the two apart.
-const relayDisconnectToOrigin = async (origin: string): Promise<void> => {
-  const tabs = await chromeApi?.tabs?.query({ url: `${origin}/*` }).catch(() => [])
-  if (tabs === undefined) {
-    return
-  }
+// A wallet-initiated disconnect. Emptying the accounts first is the whole difference between
+// this and a lock, which pushes `statusChanged` alone: a dApp watching for a party can then
+// tell the two apart. Both events are sent from here, in one go, because two messages from
+// the popup would be two trips through the worker with no ordering between them.
+const relayDisconnectToTabs = async (tabs: Array<{ id?: number }>): Promise<void> => {
   await sendToTabs(tabs, 'accountsChanged', [])
   await sendToTabs(tabs, 'statusChanged', {
     provider: { id: CARPINCHO_PROVIDER_ID, providerType: 'browser' },
     connection: { isConnected: false, isNetworkConnected: true },
   })
+}
+
+// One origin, disconnected by itself: the general relay reads the connected-origins list this
+// disconnect is about to leave, and must not reach other dApps.
+const relayDisconnectToOrigin = async (origin: string): Promise<void> => {
+  const tabs = await chromeApi?.tabs?.query({ url: `${origin}/*` }).catch(() => [])
+  if (tabs !== undefined) {
+    await relayDisconnectToTabs(tabs)
+  }
+}
+
+// Every connected dApp at once, for a vault reset. The forget has to happen here, after the
+// relay: clearing the origins from the popup first would leave the relay with nobody to tell.
+const disconnectEveryDapp = async (): Promise<void> => {
+  const origins = await readDirectConnectedOrigins().catch((): string[] => [])
+  if (origins.length > 0) {
+    const tabs = await chromeApi?.tabs
+      ?.query({ url: origins.map((origin) => `${origin}/*`) })
+      .catch(() => [])
+    if (tabs !== undefined) {
+      await relayDisconnectToTabs(tabs)
+    }
+  }
+  await clearDirectConnectedOrigins().catch(() => undefined)
 }
 
 const pendingRequests = new Map<
@@ -217,8 +230,9 @@ const updateActionBadge = async (): Promise<void> => {
 // when a dApp request lands is the SDK's toolbar-less picker, so the toolbar popup cannot be
 // opened from here. The wallet gets its own popup window instead, one at a time: `id` is the
 // window on screen, `opening` a create still in flight. Two things open it: a queued request
-// waiting for the user, and a dApp calling `sdk.open()`.
-const walletWindow: { id?: number; opening?: Promise<void> } = {}
+// waiting for the user, and a dApp calling `sdk.open()`. `forRequest` records which, because
+// only a window opened for a request closes itself once the requests are answered.
+const walletWindow: { id?: number; opening?: Promise<void>; forRequest?: boolean } = {}
 
 const WALLET_WINDOW_WIDTH = 420
 const WALLET_WINDOW_HEIGHT = 640
@@ -285,6 +299,7 @@ const createWalletWindow = async (forRequest: boolean): Promise<void> => {
       return
     }
     walletWindow.id = created.id
+    walletWindow.forRequest = forRequest
   } finally {
     walletWindow.opening = undefined
   }
@@ -300,17 +315,24 @@ const openWalletWindow = async (forRequest: boolean): Promise<void> => {
   const { id } = walletWindow
   if (id !== undefined) {
     await chromeApi?.windows?.update(id, { focused: true })
+    return
   }
+  // The create this waited on closed its own window again, because the requests it was for
+  // were answered while it was still opening. Nothing is on screen, so open one.
+  walletWindow.opening = createWalletWindow(forRequest)
+  await walletWindow.opening
 }
 
 // Forgets the window before removing it so the `onRemoved` listener does not read a close
-// the wallet asked for as the user dismissing the prompt.
+// the wallet asked for as the user dismissing the prompt. A window a dApp asked for through
+// `sdk.open()` is left alone: the user opened the wallet to look at it, and answering some
+// unrelated request is no reason to take it away.
 const closeWalletWindow = async (): Promise<void> => {
-  const { id } = walletWindow
-  walletWindow.id = undefined
-  if (id === undefined) {
+  const { id, forRequest } = walletWindow
+  if (id === undefined || forRequest !== true) {
     return
   }
+  walletWindow.id = undefined
   await chromeApi?.windows?.remove(id)
 }
 
@@ -385,13 +407,26 @@ const handleProviderRequest = async (
   await queueProviderRequest(message, sendResponse)
 }
 
-// `sdk.open()`, from a dApp the user has already connected. Any page can post the message
-// this arrives as, so an origin the user never approved gets nothing: opening a window is
-// visible to the user, and an unconnected page has no business doing it.
+// Any script on a connected page can post the message this arrives as, so a loop of them
+// would sit on the user's screen stealing focus. One open per second is more than any real
+// `sdk.open()` needs.
+const OPEN_WALLET_THROTTLE_MS = 1000
+let lastOpenWalletAt = 0
+
+// `sdk.open()`, from a dApp the user has already connected. An origin the user never approved
+// gets nothing: opening a window is visible to the user, and an unconnected page has no
+// business doing it.
 const handleOpenWallet = async (message: RuntimeOpenWallet): Promise<void> => {
+  // Origin first, so a page that is not allowed to open anything cannot start the clock and
+  // block a connected dApp's open along with its own.
   if (!(await isOriginConnected(message.origin))) {
     return
   }
+  const now = Date.now()
+  if (now - lastOpenWalletAt < OPEN_WALLET_THROTTLE_MS) {
+    return
+  }
+  lastOpenWalletAt = now
   await openWalletWindow(false)
 }
 
@@ -410,9 +445,16 @@ chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === 'CARPINCHO_OPEN_WALLET') {
-    void handleOpenWallet(message)
+    void handleOpenWallet(message).catch(() => undefined)
     sendResponse({ ok: true })
     return false
+  }
+
+  if (message.type === 'CARPINCHO_DISCONNECT_DAPPS') {
+    void disconnectEveryDapp()
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }))
+    return true
   }
 
   if (message.type === 'CARPINCHO_GET_PENDING_REQUESTS') {
@@ -430,7 +472,7 @@ chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'CARPINCHO_FORGET_CONNECTED_ORIGIN') {
     // Without this the dApp never learns it was disconnected: nothing is pushed and the
     // relay list stops covering it, so its session face just goes stale.
-    void queueRelay(() => relayDisconnectToOrigin(message.origin))
+    void relayDisconnectToOrigin(message.origin)
       .then(() => forgetDirectConnectedOrigin(message.origin))
       .then(sendResponse)
       .catch(() => sendResponse([]))
@@ -438,7 +480,7 @@ chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === 'CARPINCHO_BROADCAST_EVENT') {
-    void queueRelay(() => relayBroadcastToTabs(message))
+    void relayBroadcastToTabs(message)
     sendResponse({ ok: true })
     return false
   }
