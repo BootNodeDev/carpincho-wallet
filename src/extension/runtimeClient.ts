@@ -85,9 +85,8 @@ export const forgetConnectedOrigin = async (origin: string): Promise<string[]> =
     origin,
   } satisfies RuntimeForgetConnectedOrigin)
 
-// Vault reset: tell every connected dApp it is disconnected, then forget them all. The
-// background owns both halves so the disconnect still has an audience when it runs. Off the
-// extension there is nothing to tell, so this just drops the in-memory origins.
+// Vault reset. Off the extension there is nobody to tell, so it just drops the in-memory
+// origins the fallback keeps.
 export const disconnectAllDapps = async (): Promise<void> => {
   if (!isExtensionRuntime()) {
     await clearDirectConnectedOrigins()

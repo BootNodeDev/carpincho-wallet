@@ -68,6 +68,12 @@ const resetWindowCalls = (): void => {
   windowStub.noFocusedWindow = false
 }
 
+// Long enough for any background work a message kicked off to finish, when the assertion is
+// that nothing happened and there is no state to wait on.
+const settle = async (): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve, 25))
+}
+
 const waitFor = async (done: () => boolean): Promise<void> => {
   for (let attempt = 0; attempt < 200 && !done(); attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5))
@@ -180,8 +186,7 @@ describe('background: CARPINCHO_FORGET_CONNECTED_ORIGIN', () => {
     await waitFor(() => response !== undefined)
 
     // The relay went to that origin's tabs only, before the forget could filter it out
-    assert.deepEqual(queried, ['http://localhost:3012/*'])
-    assert.equal(relayed.length, 2)
+    assert.deepEqual(queried, [['http://localhost:3012/*']])
     assert.deepEqual(
       relayed.map((entry) => entry.tabId),
       [7, 7],
@@ -336,7 +341,7 @@ describe('background: CARPINCHO_OPEN_WALLET', () => {
 
   it('ignores an origin the user never connected', async () => {
     openWallet('http://localhost:9999')
-    await new Promise((resolve) => setTimeout(resolve, 25))
+    await settle()
 
     assert.deepEqual(createdWindows, [])
   })
@@ -344,7 +349,7 @@ describe('background: CARPINCHO_OPEN_WALLET', () => {
   it('opens the wallet for a connected dApp', async () => {
     openWallet('http://localhost:4000')
     await waitFor(() => createdWindows.length >= 1)
-    await new Promise((resolve) => setTimeout(resolve, 25))
+    await settle()
 
     assert.equal(createdWindows.length, 1)
     assert.equal(createdWindows[0].url, 'chrome-extension://test/index.html')
@@ -359,7 +364,7 @@ describe('background: CARPINCHO_OPEN_WALLET', () => {
     // screen. The throttle is what stops that: no second focus call.
     openWallet('http://localhost:4000')
     openWallet('http://localhost:4000')
-    await new Promise((resolve) => setTimeout(resolve, 25))
+    await settle()
 
     assert.deepEqual(focusedWindows, [])
     assert.equal(createdWindows.length, 1)
@@ -370,7 +375,7 @@ describe('background: CARPINCHO_OPEN_WALLET', () => {
     queueConnect(9, 'http://localhost:9008', answers)
     await waitFor(() => focusedWindows.length >= 1)
     answerConnect('9')
-    await new Promise((resolve) => setTimeout(resolve, 25))
+    await settle()
 
     // The user opened the wallet to look at it. Answering someone else's request is no
     // reason to take it away, and it was never opened for that request.
@@ -379,6 +384,35 @@ describe('background: CARPINCHO_OPEN_WALLET', () => {
     assert.deepEqual(answers[0].result, { isConnected: true })
 
     // Leave the window closed for the next group
+    assert.ok(windowRemoved)
+    windowRemoved(APPROVAL_WINDOW_ID)
+  })
+})
+
+describe('background: sdk.open() while a request window is already up', () => {
+  before(() => {
+    resetWindowCalls()
+    store[DIRECT_CONNECTED_ORIGINS_KEY] = ['http://localhost:4000']
+  })
+
+  it('keeps the window the dApp asked for, though a request opened it', async () => {
+    // "May this window close itself?" belongs to the window, not to whoever opened it. The
+    // request opened this one; the dApp then asked for it, and that has to stick.
+    const answers: JsonRpcResponse[] = []
+    queueConnect(10, 'http://localhost:9009', answers)
+    await waitFor(() => createdWindows.length >= 1)
+
+    // Past the throttle the previous group's open started
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    openWallet('http://localhost:4000')
+    await waitFor(() => focusedWindows.length >= 1)
+
+    answerConnect('10')
+    await settle()
+
+    assert.equal(createdWindows.length, 1)
+    assert.deepEqual(removedWindows, [])
+
     assert.ok(windowRemoved)
     windowRemoved(APPROVAL_WINDOW_ID)
   })

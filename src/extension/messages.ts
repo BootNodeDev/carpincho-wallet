@@ -70,9 +70,8 @@ export interface RuntimeProviderResponse {
   response: JsonRpcResponse
 }
 
-// Page → content script → background: the dApp called `sdk.open()` and wants the wallet UI
-// on screen. Carries the asking origin, not the URL the page sent: the background opens its
-// own packaged page, so a page cannot aim this at anything else.
+// Page → content script → background: the dApp called `sdk.open()`. Carries the asking
+// origin, not the URL the page sent, which the background never reads.
 export interface RuntimeOpenWallet {
   type: 'CARPINCHO_OPEN_WALLET'
   origin: string
@@ -93,15 +92,12 @@ export interface RuntimeForgetConnectedOrigin {
 }
 
 // Popup → background: disconnect every connected dApp and forget them all, for a vault reset.
-// The background does both halves, in that order, because a popup that cleared the origin
-// list itself would leave the disconnect with nobody left to tell.
 export interface RuntimeDisconnectDapps {
   type: 'CARPINCHO_DISCONNECT_DAPPS'
 }
 
 // Wallet→page broadcast: popup → background → content script → page. `eventName` is typed by
-// the shared CIP-0103 list the WalletConnect session declares, so this path cannot push an
-// event a dApp was never told to expect.
+// the shared CIP-0103 list the WalletConnect session declares.
 export interface RuntimeBroadcastEvent {
   type: 'CARPINCHO_BROADCAST_EVENT'
   eventName: Cip103Event

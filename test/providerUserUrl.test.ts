@@ -1,11 +1,22 @@
 import assert from 'node:assert/strict'
-import { afterEach, describe, it } from 'node:test'
+import { afterEach, describe, it, type TestContext } from 'node:test'
 import { buildStatus } from '@/provider/status'
 
 const originalChrome = (globalThis as { chrome?: unknown }).chrome
 
 const setChrome = (value: unknown): void => {
   Object.defineProperty(globalThis, 'chrome', { configurable: true, value })
+}
+
+// buildStatus asks wallet-service for the network before it answers; stub it so these tests
+// are about the URL and nothing else.
+const stubStatusFetch = (t: TestContext): void => {
+  t.mock.method(globalThis, 'fetch', () =>
+    Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ jsonrpc: '2.0', id: '1', result: {} }),
+    } as Response),
+  )
 }
 
 afterEach(() => {
@@ -17,12 +28,7 @@ afterEach(() => {
 // wallet. The value has to be wherever this copy of the wallet actually lives.
 describe('provider status userUrl', () => {
   it('points at the packaged page when running as the extension', async (t) => {
-    t.mock.method(globalThis, 'fetch', () =>
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ jsonrpc: '2.0', id: '1', result: {} }),
-      } as Response),
-    )
+    stubStatusFetch(t)
     setChrome({ runtime: { getURL: (path: string) => `chrome-extension://test/${path}` } })
 
     const status = await buildStatus()
@@ -31,12 +37,7 @@ describe('provider status userUrl', () => {
   })
 
   it("points at the wallet's own origin on the web build", async (t) => {
-    t.mock.method(globalThis, 'fetch', () =>
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ jsonrpc: '2.0', id: '1', result: {} }),
-      } as Response),
-    )
+    stubStatusFetch(t)
     setChrome(undefined)
 
     const status = await buildStatus()
