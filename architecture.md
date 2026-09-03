@@ -153,7 +153,7 @@ Token balances, transfers, and Amulet auto-accept are layered on top of the wall
 
 Reads use `useQuery`. Writes use `useMutation` plus `invalidateQueries` for every cache the write affects. No component keeps a `useState` busy flag for a server call: `isPending` is the busy flag, `error` is the failure, and `variables` is what the call asked for — which is how the Accept row hides itself while the accept is in flight, and how the auto-accept switch keeps reading the value the last toggle asked for until a polled status agrees with it.
 
-Mutations run with `networkMode: 'always'` (set in the shared client factory). wallet-service can sit on localhost, so the browser calling itself offline says nothing about reachability, and the default would park a write instead of attempting it — with a promise that never settles.
+Every request runs with `networkMode: 'always'` (set in the shared client factory), reads included. wallet-service can sit on localhost, so the browser calling itself offline says nothing about reachability, and the default parks the call instead of attempting it: a parked write leaves a promise that never settles, and a parked read reports neither data nor error, so the footer says disconnected and no poll can correct it.
 
 Keys live in [`src/config/queryKeys.ts`](src/config/queryKeys.ts) — never inline a key literal at a call site, or a write cannot find what a read wrote. That module also exports `invalidateTokenState`, the holdings + holding-details + pending-transfers trio that every token write (accept, send, tap Amulet) refreshes as one.
 
