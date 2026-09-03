@@ -29,13 +29,15 @@ export const ActivityPanel = ({
 }: ActivityPanelProps): JSX.Element => {
   const vault = useVault()
   const activeAccount = account ?? vault.primary ?? vault.accounts[0]
-  const [acceptingCid, setAcceptingCid] = useState<string | undefined>(undefined)
   const [detailsTransfer, setDetailsTransfer] = useState<PendingTokenTransfer | null>(null)
-  const { transfers, loading, error, accept } = usePendingCip56Transfers(activeAccount, {
-    api,
-    signMessage: vault.signMessage,
-    recordTransaction: vault.recordTransaction,
-  })
+  const { transfers, loading, error, accept, acceptingCid } = usePendingCip56Transfers(
+    activeAccount,
+    {
+      api,
+      signMessage: vault.signMessage,
+      recordTransaction: vault.recordTransaction,
+    },
+  )
 
   const { incoming, outgoing } = useMemo(() => {
     const partyId = activeAccount?.partyId
@@ -79,7 +81,6 @@ export const ActivityPanel = ({
   // Optimistically hides the accepted transfer while it settles; a progress toast tracks the
   // flow and is replaced by the result. On failure the transfer reappears so it can be retried.
   const onAccept = async (transferInstructionCid: string): Promise<void> => {
-    setAcceptingCid(transferInstructionCid)
     const pendingToastId = toast.info('Accepting transfer...')
     try {
       await accept(transferInstructionCid)
@@ -88,8 +89,6 @@ export const ActivityPanel = ({
     } catch (err) {
       toast.dismiss(pendingToastId)
       toast.error(`Accept failed: ${(err as Error).message}`)
-    } finally {
-      setAcceptingCid(undefined)
     }
   }
 

@@ -1,3 +1,4 @@
+import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { PrimaryButton } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
@@ -25,8 +26,22 @@ export const ExerciseChoiceUtil = ({
   const [choice, setChoice] = useState('')
   const [json, setJson] = useState('{}')
   const [jsonValid, setJsonValid] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [updateId, setUpdateId] = useState<string | undefined>()
+
+  const submit = useMutation({
+    mutationFn: async () =>
+      await exerciseContract({
+        account,
+        templateId: templateId.trim(),
+        contractId: contractId.trim(),
+        choice: choice.trim(),
+        choiceArgument: parseJsonObject(json, 'Choice argument'),
+        signMessage: vault.signMessage,
+        recordTransaction: vault.recordTransaction,
+      }),
+  })
+  const busy = submit.isPending
+  // A resubmit clears the previous id rather than leaving a stale one under the form.
+  const updateId = busy ? undefined : submit.data?.updateId
 
   const canSubmit =
     templateId.trim() !== '' &&
@@ -36,25 +51,11 @@ export const ExerciseChoiceUtil = ({
     !busy
 
   const onSubmit = async (): Promise<void> => {
-    setBusy(true)
-    setUpdateId(undefined)
     try {
-      const choiceArgument = parseJsonObject(json, 'Choice argument')
-      const result = await exerciseContract({
-        account,
-        templateId: templateId.trim(),
-        contractId: contractId.trim(),
-        choice: choice.trim(),
-        choiceArgument,
-        signMessage: vault.signMessage,
-        recordTransaction: vault.recordTransaction,
-      })
-      setUpdateId(result.updateId)
+      await submit.mutateAsync()
       toast.success('Choice exercised')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
     }
   }
 

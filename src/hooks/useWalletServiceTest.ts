@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
+import { useCallback } from 'react'
 import { isCantonConnected, networkIdFromStatus, walletServiceStatus } from '@/api/walletService'
 
 // `not-connected` is wallet-service answering while Canton is not connected: the URL is right.
@@ -9,6 +10,12 @@ export type WalletServiceTestState =
   | 'not-connected'
   | 'unreachable'
 
+interface ProbeResult {
+  state: Exclude<WalletServiceTestState, 'idle' | 'testing'>
+  networkId?: string
+  reason?: string
+}
+
 export interface WalletServiceTest {
   state: WalletServiceTestState
   networkId?: string
@@ -17,42 +24,40 @@ export interface WalletServiceTest {
   test: (rpcUrl: string) => Promise<void>
 }
 
-// Probes a draft RPC URL (not the saved config) and exposes the result as gate state.
-export const useWalletServiceTest = (): WalletServiceTest => {
-  const [state, setState] = useState<WalletServiceTestState>('idle')
-  const [networkId, setNetworkId] = useState<string | undefined>(undefined)
-  const [reason, setReason] = useState<string | undefined>(undefined)
-  const [testedUrl, setTestedUrl] = useState<string | undefined>(undefined)
-  const seq = useRef(0)
-
-  const test = useCallback(async (rpcUrl: string): Promise<void> => {
-    seq.current += 1
-    const ticket = seq.current
-    setTestedUrl(rpcUrl)
-    setState('testing')
-    try {
-      const status = await walletServiceStatus({ rpcUrl })
-      if (ticket !== seq.current) {
-        return
+// A failed probe is a result to show, not an error to throw, so the mutation always resolves.
+const probe = async (rpcUrl: string): Promise<ProbeResult> => {
+  try {
+    const status = await walletServiceStatus({ rpcUrl })
+    if (!isCantonConnected(status)) {
+      return {
+        state: 'not-connected',
+        reason: status.connection?.networkReason ?? 'Canton network not connected',
       }
-      if (isCantonConnected(status)) {
-        setNetworkId(networkIdFromStatus(status))
-        setReason(undefined)
-        setState('connected')
-      } else {
-        setNetworkId(undefined)
-        setReason(status.connection?.networkReason ?? 'Canton network not connected')
-        setState('not-connected')
-      }
-    } catch (err) {
-      if (ticket !== seq.current) {
-        return
-      }
-      setNetworkId(undefined)
-      setReason(err instanceof Error ? err.message : String(err))
-      setState('unreachable')
     }
-  }, [])
+    const networkId = networkIdFromStatus(status)
+    return { state: 'connected', ...(networkId === undefined ? {} : { networkId }) }
+  } catch (err) {
+    return { state: 'unreachable', reason: err instanceof Error ? err.message : String(err) }
+  }
+}
 
-  return { state, networkId, reason, testedUrl, test }
+// Probes a draft RPC URL (not the saved config) and exposes the result as gate state.
+// The mutation observes only its latest call, so a slow probe cannot land on a newer one.
+export const useWalletServiceTest = (): WalletServiceTest => {
+  const { mutateAsync, isPending, data, variables } = useMutation({ mutationFn: probe })
+
+  // Callers debounce and retry on this identity, so it must not change between renders.
+  const test = useCallback(
+    async (rpcUrl: string): Promise<void> => {
+      await mutateAsync(rpcUrl)
+    },
+    [mutateAsync],
+  )
+
+  const result = isPending ? undefined : data
+  return {
+    ...(result ?? { state: isPending ? 'testing' : 'idle' }),
+    ...(variables === undefined ? {} : { testedUrl: variables }),
+    test,
+  }
 }

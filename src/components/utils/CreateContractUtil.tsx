@@ -1,3 +1,4 @@
+import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { PrimaryButton } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
@@ -23,29 +24,28 @@ export const CreateContractUtil = ({
   const [templateId, setTemplateId] = useState('')
   const [json, setJson] = useState('{}')
   const [jsonValid, setJsonValid] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [updateId, setUpdateId] = useState<string | undefined>()
 
+  const submit = useMutation({
+    mutationFn: async () =>
+      await createContract({
+        account,
+        templateId: templateId.trim(),
+        createArguments: parseJsonObject(json, 'Create arguments'),
+        signMessage: vault.signMessage,
+        recordTransaction: vault.recordTransaction,
+      }),
+  })
+  const busy = submit.isPending
+  // A resubmit clears the previous id rather than leaving a stale one under the form.
+  const updateId = busy ? undefined : submit.data?.updateId
   const canSubmit = templateId.trim() !== '' && jsonValid && !busy
 
   const onSubmit = async (): Promise<void> => {
-    setBusy(true)
-    setUpdateId(undefined)
     try {
-      const createArguments = parseJsonObject(json, 'Create arguments')
-      const result = await createContract({
-        account,
-        templateId: templateId.trim(),
-        createArguments,
-        signMessage: vault.signMessage,
-        recordTransaction: vault.recordTransaction,
-      })
-      setUpdateId(result.updateId)
+      await submit.mutateAsync()
       toast.success('Contract created')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
     }
   }
 

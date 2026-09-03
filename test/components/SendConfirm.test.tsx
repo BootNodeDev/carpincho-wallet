@@ -6,6 +6,7 @@ import type { TokenHoldingSummary } from '@/cip56/holdings'
 import { SendConfirm } from '@/components/SendConfirm'
 import type { Cip56SendApi } from '@/components/SendTokenForm'
 import { toast } from '@/components/ui/toast'
+import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import type { AccountPublic } from '@/vault/types'
 import { VaultContext, type VaultContextValue } from '@/vault/VaultContext'
 
@@ -56,19 +57,21 @@ const renderConfirm = (
   onCancel = (): void => undefined,
 ): void => {
   render(
-    <VaultContext.Provider value={baseVault()}>
-      <SendConfirm
-        account={ACCOUNT}
-        summary={SUMMARY}
-        recipient="bob::party"
-        amount="7.5"
-        memo="lunch"
-        deadline="1h"
-        sendApi={sendApi}
-        onCancel={onCancel}
-        onSent={onSent}
-      />
-    </VaultContext.Provider>,
+    <TestQueryClientProvider>
+      <VaultContext.Provider value={baseVault()}>
+        <SendConfirm
+          account={ACCOUNT}
+          summary={SUMMARY}
+          recipient="bob::party"
+          amount="7.5"
+          memo="lunch"
+          deadline="1h"
+          sendApi={sendApi}
+          onCancel={onCancel}
+          onSent={onSent}
+        />
+      </VaultContext.Provider>
+    </TestQueryClientProvider>,
   )
 }
 

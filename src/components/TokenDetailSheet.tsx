@@ -27,8 +27,6 @@ export interface TokenDetailSheetProps {
   summary: TokenHoldingSummary
   holdingsApi?: Cip56HoldingsApi
   sendApi?: Cip56SendApi
-  // Lets the host refresh holdings after a transfer leaves the wallet.
-  onSent?: () => void
 }
 
 interface DetailScreenProps {
@@ -156,7 +154,6 @@ export const TokenDetailSheet = ({
   summary,
   holdingsApi,
   sendApi,
-  onSent,
 }: TokenDetailSheetProps): JSX.Element => {
   const vault = useVault()
   const [screen, setScreen] = useState<Screen>('detail')
@@ -242,12 +239,6 @@ export const TokenDetailSheet = ({
     goTo('holding')
   }
 
-  // After a transfer leaves the wallet, refresh the host and close the whole sheet.
-  const handleSent = (): void => {
-    onSent?.()
-    handleOpenChange(false)
-  }
-
   const sendTitle = `Send ${summary.tokenLabel}`
   const titles: Record<Screen, string> = {
     detail: summary.tokenLabel,
@@ -324,7 +315,7 @@ export const TokenDetailSheet = ({
             deadline={deadline}
             sendApi={sendApi}
             onCancel={goBack}
-            onSent={handleSent}
+            onSent={() => handleOpenChange(false)}
           />
         )}
         {screen === 'receive' && <TokenReceive partyId={account.partyId} />}

@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { Switch } from '@/components/ui/Switch'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { toast } from '@/components/ui/toast'
@@ -27,30 +26,14 @@ export const AutoAcceptSetting = ({ account, api }: AutoAcceptSettingProps): JSX
   const isExpired = status?.expired === true
   const isActive = status?.active === true && !isExpired
   const confirmed = isActive || isExpired
+  // Read the requested state while the command settles; the ledger can lag behind the click.
+  const checked = preapproval.requested ?? confirmed
 
-  // Optimistic: hold the requested state until polling confirms it; the ledger can lag.
-  const [optimistic, setOptimistic] = useState<boolean | undefined>(undefined)
-  const checked = optimistic ?? confirmed
-
-  useEffect(() => {
-    if (optimistic !== undefined && optimistic === confirmed) {
-      setOptimistic(undefined)
-    }
-  }, [optimistic, confirmed])
-
-  const handleToggle = async (): Promise<void> => {
-    const next = !checked
-    setOptimistic(next)
+  const handleToggle = async (next: boolean): Promise<void> => {
     try {
-      if (next) {
-        await preapproval.enable()
-        toast.success('Auto-accept enabled')
-      } else {
-        await preapproval.disable()
-        toast.success('Auto-accept disabled')
-      }
+      await preapproval.toggle(next)
+      toast.success(next ? 'Auto-accept enabled' : 'Auto-accept disabled')
     } catch (error) {
-      setOptimistic(undefined)
       toast.error(error instanceof Error ? error.message : 'Auto-accept failed')
     }
   }
@@ -66,8 +49,8 @@ export const AutoAcceptSetting = ({ account, api }: AutoAcceptSettingProps): JSX
         data-testid="auto-accept-toggle"
         checked={checked}
         disabled={preapproval.busy || (preapproval.loading && status === undefined)}
-        onCheckedChange={() => {
-          void handleToggle()
+        onCheckedChange={(next) => {
+          void handleToggle(next)
         }}
       />
     </div>

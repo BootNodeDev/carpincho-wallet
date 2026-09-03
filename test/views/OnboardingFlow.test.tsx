@@ -3,6 +3,7 @@ import { afterEach, describe, it } from 'node:test'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TooltipProvider } from '@/components/ui/Tooltip'
+import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import { VaultContext, type VaultContextValue } from '@/vault/VaultContext'
 import { OnboardingFlow } from '@/views/onboarding/OnboardingFlow'
 
@@ -44,11 +45,13 @@ const baseVault = (overrides: Partial<VaultContextValue> = {}): VaultContextValu
 
 const renderFlow = (overrides: Partial<VaultContextValue> = {}): void => {
   render(
-    <TooltipProvider>
-      <VaultContext.Provider value={baseVault(overrides)}>
-        <OnboardingFlow />
-      </VaultContext.Provider>
-    </TooltipProvider>,
+    <TestQueryClientProvider>
+      <TooltipProvider>
+        <VaultContext.Provider value={baseVault(overrides)}>
+          <OnboardingFlow />
+        </VaultContext.Provider>
+      </TooltipProvider>
+    </TestQueryClientProvider>,
   )
 }
 

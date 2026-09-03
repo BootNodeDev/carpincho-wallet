@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type AmuletTapApi, tapAmulet as defaultTapAmulet } from '@/cip56/amuletPreapproval'
 import {
   CHEVRON_RIGHT_ICON,
@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/icons'
 import { SectionLabel } from '@/components/ui/SectionLabel'
 import { toast } from '@/components/ui/toast'
+import { invalidateTokenState } from '@/config/queryKeys'
 import type { AccountPublic } from '@/vault/types'
 import { useVault } from '@/vault/useVault'
 
@@ -60,25 +61,29 @@ interface UtilsListProps {
 // Utils landing: a faucet action row plus drill-in rows for the ledger tools.
 export const UtilsList = ({ account, tapApi, onSelect }: UtilsListProps): JSX.Element => {
   const vault = useVault()
-  const [tapping, setTapping] = useState(false)
+  const queryClient = useQueryClient()
   const tap = tapApi?.tapAmulet ?? defaultTapAmulet
 
-  const onTap = async (): Promise<void> => {
-    setTapping(true)
-    const progressId = toast.info('Tapping 100 AMT...')
-    try {
+  // The faucet mints a holding, so the Assets tab must not wait for the next poll.
+  const tapMutation = useMutation({
+    mutationFn: async () =>
       await tap({
         account,
         signMessage: vault.signMessage,
         recordTransaction: vault.recordTransaction,
-      })
+      }),
+    onSuccess: async () => await invalidateTokenState(queryClient, account),
+  })
+
+  const onTap = async (): Promise<void> => {
+    const progressId = toast.info('Tapping 100 AMT...')
+    try {
+      await tapMutation.mutateAsync()
       toast.dismiss(progressId)
       toast.success('Tapped 100 AMT')
     } catch (err) {
       toast.dismiss(progressId)
       toast.error(err instanceof Error ? err.message : 'Amulet tap failed')
-    } finally {
-      setTapping(false)
     }
   }
 
@@ -90,7 +95,7 @@ export const UtilsList = ({ account, tapApi, onSelect }: UtilsListProps): JSX.El
           type="button"
           data-testid="utils-tap-amulet"
           className={ROW_CLASS}
-          disabled={tapping}
+          disabled={tapMutation.isPending}
           onClick={() => {
             void onTap()
           }}
@@ -99,7 +104,7 @@ export const UtilsList = ({ account, tapApi, onSelect }: UtilsListProps): JSX.El
             aria-hidden="true"
             className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground"
           >
-            {tapping ? SPINNER_ICON : DROPLET_ICON}
+            {tapMutation.isPending ? SPINNER_ICON : DROPLET_ICON}
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-[0.94rem] font-semibold text-foreground">Tap Amulet</span>

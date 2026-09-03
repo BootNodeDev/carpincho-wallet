@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import { ConfigureRpcStep } from '@/views/onboarding/ConfigureRpcStep'
 
 const originalFetch = globalThis.fetch
@@ -31,7 +32,9 @@ describe('ConfigureRpcStep', () => {
 
   it('enables Continue once the wallet-service is reachable', async () => {
     respondConnected()
-    render(<ConfigureRpcStep onConfirmed={() => undefined} />)
+    render(<ConfigureRpcStep onConfirmed={() => undefined} />, {
+      wrapper: TestQueryClientProvider,
+    })
     assert.equal(continueButton().disabled, true)
     await waitFor(() => assert.equal(continueButton().disabled, false))
     assert.ok(screen.getByText(/reachable/i))
@@ -47,6 +50,7 @@ describe('ConfigureRpcStep', () => {
           confirmed = true
         }}
       />,
+      { wrapper: TestQueryClientProvider },
     )
     await waitFor(() => assert.equal(continueButton().disabled, false))
     await userEvent.click(continueButton())
@@ -58,7 +62,9 @@ describe('ConfigureRpcStep', () => {
     globalThis.fetch = async () => {
       throw new Error('Failed to fetch')
     }
-    render(<ConfigureRpcStep onConfirmed={() => undefined} />)
+    render(<ConfigureRpcStep onConfirmed={() => undefined} />, {
+      wrapper: TestQueryClientProvider,
+    })
     await waitFor(() => {
       assert.ok(screen.getByText(/can.t reach wallet-service/i))
       assert.equal(continueButton().disabled, true)
@@ -68,7 +74,9 @@ describe('ConfigureRpcStep', () => {
 
   it('re-gates Continue when the URL is edited', async () => {
     respondConnected()
-    render(<ConfigureRpcStep onConfirmed={() => undefined} />)
+    render(<ConfigureRpcStep onConfirmed={() => undefined} />, {
+      wrapper: TestQueryClientProvider,
+    })
     await waitFor(() => assert.equal(continueButton().disabled, false))
     await userEvent.type(screen.getByLabelText(/wallet-service rpc url/i), 'x')
     assert.equal(continueButton().disabled, true)
@@ -88,7 +96,9 @@ describe('ConfigureRpcStep', () => {
         { status: 200 },
       )
     }
-    render(<ConfigureRpcStep onConfirmed={() => undefined} />)
+    render(<ConfigureRpcStep onConfirmed={() => undefined} />, {
+      wrapper: TestQueryClientProvider,
+    })
     await waitFor(() => assert.ok(screen.getByText(/can.t reach wallet-service/i)), {
       timeout: 2000,
     })

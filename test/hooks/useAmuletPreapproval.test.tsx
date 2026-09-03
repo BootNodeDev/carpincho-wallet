@@ -34,21 +34,14 @@ const Probe = ({ api }: { api: AmuletPreapprovalApi }): JSX.Element => {
       <span data-testid="busy">{state.busy ? 'busy' : 'idle'}</span>
       <span data-testid="loading">{state.loading ? 'loading' : 'idle'}</span>
       <span data-testid="status">{state.status === undefined ? 'none' : 'loaded'}</span>
+      <span data-testid="requested">{String(state.requested)}</span>
       <button
         type="button"
         onClick={() => {
-          void state.enable()
+          void state.toggle(true).catch(() => undefined)
         }}
       >
         Enable
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          void state.refresh()
-        }}
-      >
-        Refresh
       </button>
     </div>
   )
@@ -66,19 +59,15 @@ describe('useAmuletPreapproval', () => {
     assert.equal(AMULET_PREAPPROVAL_POLL_MS, 5_000)
   })
 
-  it('stays idle through a background refetch', async () => {
-    // Scenario: a poll-driven refetch must not read as busy, or the toggle would
-    // disable itself on every 5s tick.
-    let resolveRefetch: (() => void) | undefined
-    let calls = 0
+  it('reads a status fetch as loading, never as busy', async () => {
+    // Scenario: a fetch in flight must not read as busy, or the toggle would disable
+    // itself on every 5s tick.
+    let resolveStatus: (() => void) | undefined
     const api: AmuletPreapprovalApi = {
       getAmuletPreapprovalStatus: async () => {
-        calls += 1
-        if (calls >= 2) {
-          await new Promise<void>((resolve) => {
-            resolveRefetch = resolve
-          })
-        }
+        await new Promise<void>((resolve) => {
+          resolveStatus = resolve
+        })
         return { active: false, expired: false }
       },
       createAmuletPreapproval: async () => ({ updateId: 'noop' }),
@@ -87,19 +76,15 @@ describe('useAmuletPreapproval', () => {
 
     render(<Probe api={api} />, { wrapper: TestQueryClientProvider })
 
-    await waitFor(() => assert.equal(screen.getByTestId('status').textContent, 'loaded'))
-    assert.equal(screen.getByTestId('busy').textContent, 'idle')
-
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
-
     await waitFor(() => assert.equal(screen.getByTestId('loading').textContent, 'loading'))
     assert.equal(screen.getByTestId('busy').textContent, 'idle')
 
-    resolveRefetch?.()
-    await waitFor(() => assert.equal(screen.getByTestId('loading').textContent, 'idle'))
+    resolveStatus?.()
+    await waitFor(() => assert.equal(screen.getByTestId('status').textContent, 'loaded'))
+    assert.equal(screen.getByTestId('busy').textContent, 'idle')
   })
 
-  it('reads as busy only while an enable action is in flight', async () => {
+  it('reads as busy, and holds the requested value, while a toggle is in flight', async () => {
     // Scenario: flipping the toggle on should mark the hook busy until the create
     // command and its follow-up refetch settle.
     let resolveCreate: (() => void) | undefined
@@ -118,12 +103,35 @@ describe('useAmuletPreapproval', () => {
 
     await waitFor(() => assert.equal(screen.getByTestId('status').textContent, 'loaded'))
     assert.equal(screen.getByTestId('busy').textContent, 'idle')
+    assert.equal(screen.getByTestId('requested').textContent, 'undefined')
 
     await userEvent.click(screen.getByRole('button', { name: 'Enable' }))
 
     await waitFor(() => assert.equal(screen.getByTestId('busy').textContent, 'busy'))
+    assert.equal(screen.getByTestId('requested').textContent, 'true')
 
     resolveCreate?.()
     await waitFor(() => assert.equal(screen.getByTestId('busy').textContent, 'idle'))
+    assert.equal(screen.getByTestId('requested').textContent, 'undefined')
+  })
+
+  it('refetches the status after a toggle settles', async () => {
+    // Scenario: the switch must not wait for the next poll to show the ledger's answer.
+    let statusCalls = 0
+    const api: AmuletPreapprovalApi = {
+      getAmuletPreapprovalStatus: async () => {
+        statusCalls += 1
+        return { active: statusCalls > 1, expired: false }
+      },
+      createAmuletPreapproval: async () => ({ updateId: 'create-update-1' }),
+      cancelAmuletPreapproval: async () => ({ updateId: 'noop' }),
+    }
+
+    render(<Probe api={api} />, { wrapper: TestQueryClientProvider })
+
+    await waitFor(() => assert.equal(screen.getByTestId('status').textContent, 'loaded'))
+    await userEvent.click(screen.getByRole('button', { name: 'Enable' }))
+
+    await waitFor(() => assert.equal(statusCalls, 2))
   })
 })

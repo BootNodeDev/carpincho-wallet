@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import type { AmuletTapApi } from '@/cip56/amuletPreapproval'
 import { toast } from '@/components/ui/toast'
 import { UtilsList } from '@/components/utils/UtilsList'
+import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import type { AccountPublic } from '@/vault/types'
 import { VaultContext, type VaultContextValue } from '@/vault/VaultContext'
 
@@ -50,12 +51,14 @@ describe('UtilsList', () => {
   it('drills into a util when its row is clicked', async () => {
     const selected: string[] = []
     render(
-      <VaultContext.Provider value={baseVault()}>
-        <UtilsList
-          account={ACCOUNT}
-          onSelect={(util) => selected.push(util)}
-        />
-      </VaultContext.Provider>,
+      <TestQueryClientProvider>
+        <VaultContext.Provider value={baseVault()}>
+          <UtilsList
+            account={ACCOUNT}
+            onSelect={(util) => selected.push(util)}
+          />
+        </VaultContext.Provider>
+      </TestQueryClientProvider>,
     )
     await userEvent.click(screen.getByRole('button', { name: /Create contract/ }))
     assert.deepEqual(selected, ['create'])
@@ -70,13 +73,15 @@ describe('UtilsList', () => {
       },
     }
     render(
-      <VaultContext.Provider value={baseVault()}>
-        <UtilsList
-          account={ACCOUNT}
-          tapApi={tapApi}
-          onSelect={() => undefined}
-        />
-      </VaultContext.Provider>,
+      <TestQueryClientProvider>
+        <VaultContext.Provider value={baseVault()}>
+          <UtilsList
+            account={ACCOUNT}
+            tapApi={tapApi}
+            onSelect={() => undefined}
+          />
+        </VaultContext.Provider>
+      </TestQueryClientProvider>,
     )
     await userEvent.click(screen.getByRole('button', { name: /Tap Amulet/ }))
     await waitFor(() => assert.deepEqual(tapped, ['alice::party']))

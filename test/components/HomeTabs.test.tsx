@@ -174,11 +174,21 @@ describe('HomeTabs navigation', () => {
     await screen.findByRole('tab', { name: 'Activity 1' })
   })
 
-  it('keeps the optimistic auto-accept toggle on across tab switches', async () => {
-    // Scenario: enabling auto-accept flips the toggle on optimistically while the ledger
-    // catches up. Switching tabs must not unmount the Assets panel and lose that state.
+  it('keeps the in-flight auto-accept toggle on across tab switches', async () => {
+    // Scenario: enabling auto-accept flips the toggle on while the command is in flight.
+    // Switching tabs must not unmount the Assets panel and lose that state.
     const holdingsApi: Cip56HoldingsApi = {
       listTokenHoldingSummaries: async () => [],
+    }
+    let resolveCreate: (() => void) | undefined
+    const preapprovalApi = {
+      ...inactivePreapprovalApi,
+      createAmuletPreapproval: async () => {
+        await new Promise<void>((resolve) => {
+          resolveCreate = resolve
+        })
+        return { updateId: 'noop' }
+      },
     }
 
     renderHome(
@@ -186,7 +196,7 @@ describe('HomeTabs navigation', () => {
       <HomeTabs
         transactions={[]}
         tokensApi={holdingsApi}
-        preapprovalApi={inactivePreapprovalApi}
+        preapprovalApi={preapprovalApi}
       />,
     )
 
@@ -201,6 +211,10 @@ describe('HomeTabs navigation', () => {
 
     const toggleAfter = await screen.findByRole('switch', { name: 'Auto-accept incoming' })
     assert.equal(toggleAfter.getAttribute('aria-checked'), 'true')
+
+    // Once the command settles, the refreshed ledger status is what the toggle reads.
+    resolveCreate?.()
+    await waitFor(() => assert.equal(toggleAfter.getAttribute('aria-checked'), 'false'))
   })
 
   it('shows Activity only for the selected account', async () => {

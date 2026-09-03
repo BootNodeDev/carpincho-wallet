@@ -1,3 +1,4 @@
+import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { type DarUploadResponse, uploadDarFile } from '@/api/walletService'
 import { PrimaryButton } from '@/components/ui/Button'
@@ -17,8 +18,15 @@ const defaultApi: DarUploadApi = { uploadDarFile }
 // Development-only utility for uploading compiled DAML archives through wallet-service.
 export const DarUploadPanel = ({ api = defaultApi }: DarUploadPanelProps): JSX.Element => {
   const [file, setFile] = useState<File | undefined>()
-  const [uploading, setUploading] = useState(false)
-  const [uploadedFileName, setUploadedFileName] = useState<string | undefined>()
+
+  const upload = useMutation({
+    mutationFn: async (selected: File) => {
+      await api.uploadDarFile(selected)
+      return selected.name
+    },
+  })
+  // The name of the file that landed, cleared while another upload is in flight.
+  const uploadedFileName = upload.isPending ? undefined : upload.data
 
   // Keeps validation and toast feedback inside the dev-only upload utility.
   const onUpload = async (): Promise<void> => {
@@ -26,16 +34,11 @@ export const DarUploadPanel = ({ api = defaultApi }: DarUploadPanelProps): JSX.E
       toast.warning('Select a DAR file')
       return
     }
-    setUploading(true)
-    setUploadedFileName(undefined)
     try {
-      await api.uploadDarFile(file)
-      setUploadedFileName(file.name)
-      toast.success(`${file.name} uploaded`)
+      const name = await upload.mutateAsync(file)
+      toast.success(`${name} uploaded`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
-    } finally {
-      setUploading(false)
     }
   }
 
@@ -49,19 +52,19 @@ export const DarUploadPanel = ({ api = defaultApi }: DarUploadPanelProps): JSX.E
         prompt="Click to choose a .dar file."
         fileName={file?.name ?? null}
         onSelect={(selected) => {
-          setUploadedFileName(undefined)
+          upload.reset()
           setFile(selected ?? undefined)
         }}
       />
       <PrimaryButton
         className="w-full"
         data-testid="dar-upload-submit"
-        disabled={file === undefined || uploading}
+        disabled={file === undefined || upload.isPending}
         onClick={() => {
           void onUpload()
         }}
       >
-        {uploading ? 'Uploading...' : 'Upload'}
+        {upload.isPending ? 'Uploading...' : 'Upload'}
       </PrimaryButton>
       {uploadedFileName === undefined ? null : (
         <p

@@ -1,9 +1,14 @@
 import { QueryClient, type QueryClientConfig } from '@tanstack/react-query'
 
-type QueryDefaults = NonNullable<QueryClientConfig['defaultOptions']>['queries']
+type Defaults = NonNullable<QueryClientConfig['defaultOptions']>
+type QueryDefaults = Defaults['queries']
+type MutationDefaults = Defaults['mutations']
 
 // Shared TanStack Query policy: server state is polled explicitly, never on focus or retry.
-export const createQueryClient = (queries: QueryDefaults = {}): QueryClient =>
+export const createQueryClient = (
+  queries: QueryDefaults = {},
+  mutations: MutationDefaults = {},
+): QueryClient =>
   new QueryClient({
     defaultOptions: {
       queries: {
@@ -11,5 +16,6 @@ export const createQueryClient = (queries: QueryDefaults = {}): QueryClient =>
         retry: false,
         ...queries,
       },
+      mutations,
     },
   })

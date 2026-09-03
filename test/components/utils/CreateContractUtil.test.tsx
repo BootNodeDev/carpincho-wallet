@@ -6,6 +6,7 @@ import { TooltipProvider } from '@/components/ui/Tooltip'
 import { toast } from '@/components/ui/toast'
 import { CreateContractUtil } from '@/components/utils/CreateContractUtil'
 import type { createContract as CreateContractFn } from '@/ledger/contracts'
+import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import type { AccountPublic } from '@/vault/types'
 import { VaultContext, type VaultContextValue } from '@/vault/VaultContext'
 
@@ -44,14 +45,16 @@ const baseVault = (): VaultContextValue =>
 
 const renderUtil = (createContract: typeof CreateContractFn): void => {
   render(
-    <TooltipProvider>
-      <VaultContext.Provider value={baseVault()}>
-        <CreateContractUtil
-          account={ACCOUNT}
-          createContract={createContract}
-        />
-      </VaultContext.Provider>
-    </TooltipProvider>,
+    <TestQueryClientProvider>
+      <TooltipProvider>
+        <VaultContext.Provider value={baseVault()}>
+          <CreateContractUtil
+            account={ACCOUNT}
+            createContract={createContract}
+          />
+        </VaultContext.Provider>
+      </TooltipProvider>
+    </TestQueryClientProvider>,
   )
 }
 

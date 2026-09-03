@@ -4,6 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DarUploadPanel } from '@/components/DarUploadPanel'
 import { toast } from '@/components/ui/toast'
+import { TestQueryClientProvider } from '@/test-utils/queryClient'
 
 describe('DarUploadPanel', () => {
   afterEach(() => {
@@ -27,6 +28,7 @@ describe('DarUploadPanel', () => {
           },
         }}
       />,
+      { wrapper: TestQueryClientProvider },
     )
 
     await userEvent.upload(screen.getByLabelText('DAR file'), selectedFile)

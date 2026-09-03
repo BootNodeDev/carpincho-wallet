@@ -6,6 +6,7 @@ import {
   type WalletServiceStatusResponse,
   walletServiceStatus,
 } from '@/api/walletService'
+import { queryKeys } from '@/config/queryKeys'
 import { activeRpcUrl } from '@/config/runtimeConfig'
 import { useRuntimeConfig } from '@/config/useRuntimeConfig'
 
@@ -57,7 +58,7 @@ export const useWalletServiceStatus = (
   // that described the endpoint just left, and a slow probe cannot land on a later one. A
   // failed poll keeps the last payload for the key, which is what `unreachableStatus` reads.
   const query = useQuery({
-    queryKey: ['walletService', 'status', url],
+    queryKey: queryKeys.walletServiceStatus(url),
     queryFn: async () => await walletServiceStatus({ rpcUrl: url }),
     refetchInterval: pollMs === null ? false : pollMs,
   })

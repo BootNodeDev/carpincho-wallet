@@ -1,5 +1,6 @@
 import { useQueries } from '@tanstack/react-query'
 import { isCantonConnected, walletServiceStatus } from '@/api/walletService'
+import { queryKeys } from '@/config/queryKeys'
 import type { WalletServiceEndpoint } from '@/config/runtimeConfig'
 
 export type Reachability = 'checking' | 'reachable' | 'not-connected' | 'unreachable'
@@ -13,7 +14,7 @@ export const useEndpointReachability = (
 ): Record<string, Reachability> => {
   const results = useQueries({
     queries: endpoints.map((endpoint) => ({
-      queryKey: ['walletService', 'reachability', endpoint.url],
+      queryKey: queryKeys.endpointReachability(endpoint.url),
       queryFn: async () => isCantonConnected(await walletServiceStatus({ rpcUrl: endpoint.url })),
       staleTime: FRESH_MS,
     })),

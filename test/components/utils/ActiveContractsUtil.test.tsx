@@ -6,6 +6,7 @@ import { TooltipProvider } from '@/components/ui/Tooltip'
 import { toast } from '@/components/ui/toast'
 import { ActiveContractsUtil } from '@/components/utils/ActiveContractsUtil'
 import type { ActiveContract, listActiveContracts as ListFn } from '@/ledger/contracts'
+import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import type { AccountPublic } from '@/vault/types'
 
 const ACCOUNT: AccountPublic = {
@@ -34,12 +35,14 @@ const OTHER: ActiveContract = {
 
 const renderUtil = (listActiveContracts: typeof ListFn): void => {
   render(
-    <TooltipProvider>
-      <ActiveContractsUtil
-        account={ACCOUNT}
-        listActiveContracts={listActiveContracts}
-      />
-    </TooltipProvider>,
+    <TestQueryClientProvider>
+      <TooltipProvider>
+        <ActiveContractsUtil
+          account={ACCOUNT}
+          listActiveContracts={listActiveContracts}
+        />
+      </TooltipProvider>
+    </TestQueryClientProvider>,
   )
 }
 
