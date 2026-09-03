@@ -151,11 +151,13 @@ Token balances, transfers, and Amulet auto-accept are layered on top of the wall
 
 ### Server state: one rule
 
-Reads use `useQuery`. Writes use `useMutation` plus `invalidateQueries` for every cache the write affects. No component keeps a `useState` busy flag for a server call: `isPending` is the busy flag, `error` is the failure, and `variables` is what the in-flight call asked for (which is how the Accept row hides itself and the auto-accept switch reads on before the ledger agrees).
+Reads use `useQuery`. Writes use `useMutation` plus `invalidateQueries` for every cache the write affects. No component keeps a `useState` busy flag for a server call: `isPending` is the busy flag, `error` is the failure, and `variables` is what the call asked for — which is how the Accept row hides itself while the accept is in flight, and how the auto-accept switch keeps reading the value the last toggle asked for until a polled status agrees with it.
+
+Mutations run with `networkMode: 'always'` (set in the shared client factory). wallet-service can sit on localhost, so the browser calling itself offline says nothing about reachability, and the default would park a write instead of attempting it — with a promise that never settles.
 
 Keys live in [`src/config/queryKeys.ts`](src/config/queryKeys.ts) — never inline a key literal at a call site, or a write cannot find what a read wrote. That module also exports `invalidateTokenState`, the holdings + holding-details + pending-transfers trio that every token write (accept, send, tap Amulet) refreshes as one.
 
-Awaiting the invalidation inside `onSuccess` keeps the mutation pending until fresh data lands, so a row never flashes back to its old value between the command settling and the refetch arriving.
+Await the invalidation inside `onSuccess` only when the mutation has to stay pending until fresh data lands, so a row does not flash back to its old value between the command settling and the refetch arriving — the accept flow and the auto-accept toggle do that. Never await it when the UI's own completion rides on the mutation (a send closes its sheet, the faucet resolves its toast): no read in `src/api/` carries a timeout, so a stalled one would strand a write that already succeeded. `onSuccess` belongs to the mutation, not to the component, so a background refresh still runs after the sheet closes.
 
 ### Data Access Layer
 
