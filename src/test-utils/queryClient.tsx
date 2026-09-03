@@ -6,7 +6,7 @@ import { createQueryClient } from '@/config/queryClient'
 // never collected: the client dies with the test, and any finite mutation gcTime schedules a
 // timer that holds the test process open — zero included, since collecting a mutation that is
 // still pending at teardown only reschedules itself, spinning the process forever.
-export const createTestQueryClient = (): QueryClient =>
+const createTestQueryClient = (): QueryClient =>
   createQueryClient({ gcTime: 0 }, { gcTime: Number.POSITIVE_INFINITY })
 
 // Wraps a test subtree in a fresh TanStack Query provider. The client is created once per
