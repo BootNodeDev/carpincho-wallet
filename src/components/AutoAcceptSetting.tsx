@@ -26,7 +26,8 @@ export const AutoAcceptSetting = ({ account, api }: AutoAcceptSettingProps): JSX
   const isExpired = status?.expired === true
   const isActive = status?.active === true && !isExpired
   const confirmed = isActive || isExpired
-  // Read the requested state while the command settles; the ledger can lag behind the click.
+  // Read the requested state until the ledger agrees with it; the contract can lag the click
+  // by several polls, and the switch must not flip back under a success toast.
   const checked = preapproval.requested ?? confirmed
 
   const handleToggle = async (next: boolean): Promise<void> => {

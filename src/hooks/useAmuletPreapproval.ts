@@ -28,7 +28,8 @@ export interface AmuletPreapprovalState {
   busy: boolean
   error?: string
   toggle: (next: boolean) => Promise<ExecutePreparedResponse>
-  // The value the in-flight toggle asked for, so the switch can read it before the ledger agrees.
+  // The value the last toggle asked for, so the switch can read it before the ledger agrees.
+  // It outlives the command: the preapproval contract can take several polls to show up.
   requested?: boolean
 }
 
@@ -84,7 +85,10 @@ export const useAmuletPreapproval = (
     onSuccess: async () =>
       await queryClient.invalidateQueries({ queryKey: queryKeys.amuletPreapproval(account) }),
   })
-  const { mutateAsync: toggle, isPending, variables } = toggleMutation
+  const { mutateAsync: toggle, isPending, isError, variables } = toggleMutation
+  // Held past the command, because a fresh status can still report the old value: the switch
+  // keeps showing what was asked for until a poll agrees with it. A failure drops the claim.
+  const requested = isError ? undefined : variables
 
   return useMemo(
     () => ({
@@ -94,8 +98,8 @@ export const useAmuletPreapproval = (
       busy: isPending,
       ...(error === undefined ? {} : { error }),
       toggle,
-      ...(isPending ? { requested: variables } : {}),
+      ...(requested === undefined ? {} : { requested }),
     }),
-    [query.data, query.isFetching, isPending, variables, error, toggle],
+    [query.data, query.isFetching, isPending, requested, error, toggle],
   )
 }

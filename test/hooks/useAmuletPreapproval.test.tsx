@@ -84,9 +84,10 @@ describe('useAmuletPreapproval', () => {
     assert.equal(screen.getByTestId('busy').textContent, 'idle')
   })
 
-  it('reads as busy, and holds the requested value, while a toggle is in flight', async () => {
-    // Scenario: flipping the toggle on should mark the hook busy until the create
-    // command and its follow-up refetch settle.
+  it('reads as busy while a toggle is in flight, and holds what it asked for after', async () => {
+    // Scenario: flipping the toggle on marks the hook busy until the create command and its
+    // follow-up refetch settle, and the requested value survives a status that still
+    // reports the preapproval as inactive.
     let resolveCreate: (() => void) | undefined
     const api: AmuletPreapprovalApi = {
       getAmuletPreapprovalStatus: async () => ({ active: false, expired: false }),
@@ -111,6 +112,26 @@ describe('useAmuletPreapproval', () => {
     assert.equal(screen.getByTestId('requested').textContent, 'true')
 
     resolveCreate?.()
+    await waitFor(() => assert.equal(screen.getByTestId('busy').textContent, 'idle'))
+    assert.equal(screen.getByTestId('requested').textContent, 'true')
+  })
+
+  it('drops the requested value when the toggle fails', async () => {
+    // Scenario: a rejected command must hand the switch back to the ledger's answer
+    // instead of holding a state the wallet never reached.
+    const api: AmuletPreapprovalApi = {
+      getAmuletPreapprovalStatus: async () => ({ active: false, expired: false }),
+      createAmuletPreapproval: async () => {
+        throw new Error('preapproval rejected')
+      },
+      cancelAmuletPreapproval: async () => ({ updateId: 'noop' }),
+    }
+
+    render(<Probe api={api} />, { wrapper: TestQueryClientProvider })
+
+    await waitFor(() => assert.equal(screen.getByTestId('status').textContent, 'loaded'))
+    await userEvent.click(screen.getByRole('button', { name: 'Enable' }))
+
     await waitFor(() => assert.equal(screen.getByTestId('busy').textContent, 'idle'))
     assert.equal(screen.getByTestId('requested').textContent, 'undefined')
   })
