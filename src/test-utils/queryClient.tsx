@@ -3,10 +3,11 @@ import { type ReactNode, useState } from 'react'
 import { createQueryClient } from '@/config/queryClient'
 
 // Creates an isolated query cache so tests cannot share CIP-56 server state. Mutations are
-// collected at once too: their five-minute default keeps a timer alive that would hold the
-// test process open long after the assertions finish.
+// never collected: the client dies with the test, and any finite mutation gcTime schedules a
+// timer that holds the test process open — zero included, since collecting a mutation that is
+// still pending at teardown only reschedules itself, spinning the process forever.
 export const createTestQueryClient = (): QueryClient =>
-  createQueryClient({ gcTime: 0 }, { gcTime: 0 })
+  createQueryClient({ gcTime: 0 }, { gcTime: Number.POSITIVE_INFINITY })
 
 // Wraps a test subtree in a fresh TanStack Query provider. The client is created once per
 // mount, so a re-render does not throw away what a mutation just wrote into the cache.
