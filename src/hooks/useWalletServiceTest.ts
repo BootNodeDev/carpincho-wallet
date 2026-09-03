@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import { useCallback } from 'react'
-import { isCantonConnected, networkIdFromStatus, walletServiceStatus } from '@/api/walletService'
+import { statusFromResponse, walletServiceStatus } from '@/api/walletService'
 
 // `not-connected` is wallet-service answering while Canton is not connected: the URL is right.
 export type WalletServiceTestState =
@@ -27,15 +27,12 @@ export interface WalletServiceTest {
 // A failed probe is a result to show, not an error to throw, so the mutation always resolves.
 const probe = async (rpcUrl: string): Promise<ProbeResult> => {
   try {
-    const status = await walletServiceStatus({ rpcUrl })
-    if (!isCantonConnected(status)) {
-      return {
-        state: 'not-connected',
-        reason: status.connection?.networkReason ?? 'Canton network not connected',
-      }
-    }
-    const networkId = networkIdFromStatus(status)
-    return { state: 'connected', ...(networkId === undefined ? {} : { networkId }) }
+    const { connected, networkId, reason } = statusFromResponse(
+      await walletServiceStatus({ rpcUrl }),
+    )
+    return connected
+      ? { state: 'connected', ...(networkId === undefined ? {} : { networkId }) }
+      : { state: 'not-connected', reason: reason ?? 'Canton network not connected' }
   } catch (err) {
     return { state: 'unreachable', reason: err instanceof Error ? err.message : String(err) }
   }
