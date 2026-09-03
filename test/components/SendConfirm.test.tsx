@@ -138,6 +138,37 @@ describe('SendConfirm', () => {
     assert.equal(screen.getByTestId('send-confirm').textContent, 'Confirm')
   })
 
+  it('refreshes balances after a send without re-reading the open token UTXO list', async () => {
+    // Scenario: the sheet closes as the send lands, so refetching its UTXO list would be a
+    // listHoldings round trip with nothing left to render it. Balances still refresh.
+    let summaryReads = 0
+    let detailReads = 0
+    const Reads = (): JSX.Element => {
+      useQuery({
+        queryKey: queryKeys.holdingSummaries(ACCOUNT),
+        queryFn: async () => (summaryReads += 1),
+      })
+      useQuery({
+        queryKey: queryKeys.holdingDetails(ACCOUNT, SUMMARY.key),
+        queryFn: async () => (detailReads += 1),
+      })
+      return <span data-testid="reads" />
+    }
+
+    renderConfirm(
+      { createTokenTransfer: async () => ({ updateId: 'u1' }) },
+      () => undefined,
+      () => undefined,
+      <Reads />,
+    )
+    await waitFor(() => assert.equal(detailReads, 1))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => assert.equal(summaryReads, 2))
+    assert.equal(detailReads, 1)
+  })
+
   it('exposes the request JSON behind a View data expander', () => {
     // The payload is now a JsonView tree; the key "recipient" and the party value are
     // rendered as separate text nodes — confirm the key is visible in the tree.

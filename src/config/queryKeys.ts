@@ -44,7 +44,11 @@ export const invalidateTokenState = async (
 ): Promise<void> => {
   await Promise.all([
     client.invalidateQueries({ queryKey: queryKeys.holdingSummaries(account) }),
-    client.invalidateQueries({ queryKey: queryKeys.holdingDetails(account) }),
+    // Marked stale without fetching: a token's UTXO list is only read while its detail sheet is
+    // open, and the one write reachable from there (send) closes the sheet as it lands, so a
+    // refetch here is a full listHoldings round trip nothing is left to render. The sheet loads
+    // fresh on every open regardless, since nothing is ever cached as fresh.
+    client.invalidateQueries({ queryKey: queryKeys.holdingDetails(account), refetchType: 'none' }),
     client.invalidateQueries({ queryKey: queryKeys.incomingTransfers(account) }),
   ])
 }
