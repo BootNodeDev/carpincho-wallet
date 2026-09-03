@@ -99,6 +99,22 @@ const chromeApi = (
   }
 ).chrome
 
+const sendToTabs = async (
+  tabs: Array<{ id?: number }>,
+  eventName: string,
+  payload: unknown,
+): Promise<void> => {
+  const relay: RuntimeEventRelay = { type: 'CARPINCHO_EVENT_RELAY', eventName, payload }
+  await Promise.all(
+    tabs.map((tab) => {
+      if (tab.id === undefined) {
+        return Promise.resolve()
+      }
+      return chromeApi?.tabs?.sendMessage(tab.id, relay).catch(() => undefined)
+    }),
+  )
+}
+
 // Wallet → page events go only to dApps the user has connected, never to every
 // injected tab, so unconnected origins cannot observe wallet activity.
 const relayBroadcastToTabs = async (message: RuntimeBroadcastEvent): Promise<void> => {
@@ -112,44 +128,33 @@ const relayBroadcastToTabs = async (message: RuntimeBroadcastEvent): Promise<voi
   if (tabs === undefined) {
     return
   }
-  const relay: RuntimeEventRelay = {
-    type: 'CARPINCHO_EVENT_RELAY',
-    eventName: message.eventName,
-    payload: message.payload,
-  }
-  await Promise.all(
-    tabs.map((tab) => {
-      if (tab.id === undefined) {
-        return Promise.resolve()
-      }
-      return chromeApi?.tabs?.sendMessage(tab.id, relay).catch(() => undefined)
-    }),
-  )
+  await sendToTabs(tabs, message.eventName, message.payload)
+}
+
+// One relay at a time, so two events the wallet sent in order arrive in that order. A
+// disconnect's empty account list has to land before its `statusChanged`, and each relay
+// awaits storage and a tab query before it sends anything.
+let relayQueue: Promise<void> = Promise.resolve()
+
+const queueRelay = (run: () => Promise<void>): Promise<void> => {
+  relayQueue = relayQueue.then(run).catch(() => undefined)
+  return relayQueue
 }
 
 // A wallet-initiated disconnect targets one origin directly: the general relay reads the
 // connected-origins list this disconnect is about to leave, and must not reach other dApps.
+// Emptying the accounts first is the whole difference between this and a lock, which pushes
+// `statusChanged` alone: a dApp watching for a party can then tell the two apart.
 const relayDisconnectToOrigin = async (origin: string): Promise<void> => {
   const tabs = await chromeApi?.tabs?.query({ url: `${origin}/*` }).catch(() => [])
   if (tabs === undefined) {
     return
   }
-  const relay: RuntimeEventRelay = {
-    type: 'CARPINCHO_EVENT_RELAY',
-    eventName: 'statusChanged',
-    payload: {
-      provider: { id: CARPINCHO_PROVIDER_ID, providerType: 'browser' },
-      connection: { isConnected: false, isNetworkConnected: true },
-    },
-  }
-  await Promise.all(
-    tabs.map((tab) => {
-      if (tab.id === undefined) {
-        return Promise.resolve()
-      }
-      return chromeApi?.tabs?.sendMessage(tab.id, relay).catch(() => undefined)
-    }),
-  )
+  await sendToTabs(tabs, 'accountsChanged', [])
+  await sendToTabs(tabs, 'statusChanged', {
+    provider: { id: CARPINCHO_PROVIDER_ID, providerType: 'browser' },
+    connection: { isConnected: false, isNetworkConnected: true },
+  })
 }
 
 const pendingRequests = new Map<
@@ -403,7 +408,7 @@ chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'CARPINCHO_FORGET_CONNECTED_ORIGIN') {
     // Without this the dApp never learns it was disconnected: nothing is pushed and the
     // relay list stops covering it, so its session face just goes stale.
-    void relayDisconnectToOrigin(message.origin)
+    void queueRelay(() => relayDisconnectToOrigin(message.origin))
       .then(() => forgetDirectConnectedOrigin(message.origin))
       .then(sendResponse)
       .catch(() => sendResponse([]))
@@ -411,7 +416,7 @@ chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === 'CARPINCHO_BROADCAST_EVENT') {
-    void relayBroadcastToTabs(message)
+    void queueRelay(() => relayBroadcastToTabs(message))
     sendResponse({ ok: true })
     return false
   }

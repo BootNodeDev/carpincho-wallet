@@ -167,7 +167,7 @@ after(() => {
 })
 
 describe('background: CARPINCHO_FORGET_CONNECTED_ORIGIN', () => {
-  it('tells the forgotten dApp it is disconnected, then forgets it', async () => {
+  it('empties the accounts before saying disconnected, then forgets the origin', async () => {
     assert.ok(listener)
     let response: unknown
     listener(
@@ -181,11 +181,18 @@ describe('background: CARPINCHO_FORGET_CONNECTED_ORIGIN', () => {
 
     // The relay went to that origin's tabs only, before the forget could filter it out
     assert.deepEqual(queried, ['http://localhost:3012/*'])
-    assert.equal(relayed.length, 1)
-    assert.equal(relayed[0].tabId, 7)
+    assert.equal(relayed.length, 2)
+    assert.deepEqual(
+      relayed.map((entry) => entry.tabId),
+      [7, 7],
+    )
+    // Empty accounts first: that ordering is how a dApp tells a disconnect from a lock,
+    // which pushes statusChanged on its own and leaves the accounts alone.
     assert.equal(relayed[0].message.type, 'CARPINCHO_EVENT_RELAY')
-    assert.equal(relayed[0].message.eventName, 'statusChanged')
-    assert.deepEqual(relayed[0].message.payload, {
+    assert.equal(relayed[0].message.eventName, 'accountsChanged')
+    assert.deepEqual(relayed[0].message.payload, [])
+    assert.equal(relayed[1].message.eventName, 'statusChanged')
+    assert.deepEqual(relayed[1].message.payload, {
       provider: { id: 'carpincho-wallet', providerType: 'browser' },
       connection: { isConnected: false, isNetworkConnected: true },
     })
@@ -193,6 +200,27 @@ describe('background: CARPINCHO_FORGET_CONNECTED_ORIGIN', () => {
     // The origin is gone from storage and the response carries the remainder
     assert.deepEqual(store[DIRECT_CONNECTED_ORIGINS_KEY], ['http://localhost:4000'])
     assert.deepEqual(response, ['http://localhost:4000'])
+  })
+})
+
+describe('background: CARPINCHO_BROADCAST_EVENT', () => {
+  it('relays two events to connected tabs in the order the wallet sent them', async () => {
+    assert.ok(listener)
+    relayed.length = 0
+    store[DIRECT_CONNECTED_ORIGINS_KEY] = ['http://localhost:4000']
+
+    for (const event of [
+      { eventName: 'accountsChanged', payload: [] },
+      { eventName: 'statusChanged', payload: { connection: { isConnected: false } } },
+    ]) {
+      listener({ type: 'CARPINCHO_BROADCAST_EVENT', ...event }, {}, () => undefined)
+    }
+    await waitFor(() => relayed.length >= 2)
+
+    assert.deepEqual(
+      relayed.map((entry) => entry.message.eventName),
+      ['accountsChanged', 'statusChanged'],
+    )
   })
 })
 

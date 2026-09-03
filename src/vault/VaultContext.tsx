@@ -159,6 +159,8 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
   // dapp-api lifecycle events: `connected` on unlock, `statusChanged` on every
   // transition. isNetworkConnected stays true (Carpincho always targets the
   // configured wallet-service; reachability surfaces through later RPC calls).
+  // A lock stops here: the accounts still exist, they are only out of reach, so nothing
+  // says they changed.
   const broadcastConnectionState = useCallback((isConnected: boolean): void => {
     const connection = { isConnected, isNetworkConnected: true }
     if (isConnected) {
@@ -169,6 +171,14 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
       connection,
     })
   }, [])
+
+  // Destroying the vault is a disconnect, not a lock: the accounts are gone. Emptying the
+  // list first is what lets a dApp tell "ask the user to unlock" from "connect again", since
+  // both end in the same `statusChanged { isConnected: false }`.
+  const broadcastDisconnect = useCallback((): void => {
+    void broadcastWalletEvent('accountsChanged', [])
+    broadcastConnectionState(false)
+  }, [broadcastConnectionState])
 
   const lock = useCallback((): void => {
     void wipeMemory().catch(() => undefined)
@@ -259,9 +269,9 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     setVaultExists(false)
     setIsLocked(true)
     bump()
-    broadcastConnectionState(false)
+    broadcastDisconnect()
     window.location.reload()
-  }, [bump, broadcastConnectionState])
+  }, [bump, broadcastDisconnect])
 
   // The one scoping of the stored accounts: the UI projection and the dapp-api payload both
   // read it, so what a dApp is offered can never drift from what the wallet shows. Empty while
