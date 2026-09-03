@@ -48,6 +48,12 @@ const pageMessages = async (during: () => void | Promise<void>): Promise<unknown
   return seen
 }
 
+// The content script drops any message that did not come from this window, and happy-dom
+// leaves `event.source` unset on `window.postMessage`, so dispatch the event with one.
+const postFromPage = (data: unknown): void => {
+  window.dispatchEvent(new MessageEvent('message', { data, source: window }))
+}
+
 const announcedProvider = (): Record<string, unknown> => {
   const details: Record<string, unknown>[] = []
   const record = (event: Event): void => {
@@ -105,16 +111,31 @@ describe('contentScript event bridge', () => {
     assert.equal('id' in frames[0].request, false)
   })
 
+  it('asks the background to open the wallet when a dApp calls sdk.open()', async () => {
+    runtimeMessages.length = 0
+
+    await pageMessages(() => {
+      postFromPage({
+        type: 'SPLICE_WALLET_EXT_OPEN',
+        // The SDK posts the userUrl it read from status. It is ignored: the background
+        // opens the extension's own page, so a page cannot aim this anywhere else.
+        url: 'https://evil.example/phishing',
+        target: 'carpincho-wallet',
+      })
+    })
+
+    assert.deepEqual(runtimeMessages, [
+      { type: 'CARPINCHO_OPEN_WALLET', origin: window.location.origin },
+    ])
+  })
+
   it('never answers an id-less request frame: notifications are not calls', async () => {
     const seen = await pageMessages(() => {
-      window.postMessage(
-        {
-          type: 'SPLICE_WALLET_REQUEST',
-          request: { jsonrpc: '2.0', method: 'statusChanged', params: {} },
-          target: 'carpincho-wallet',
-        },
-        '*',
-      )
+      postFromPage({
+        type: 'SPLICE_WALLET_REQUEST',
+        request: { jsonrpc: '2.0', method: 'statusChanged', params: {} },
+        target: 'carpincho-wallet',
+      })
     })
 
     const responses = seen.filter(

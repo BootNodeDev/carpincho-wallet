@@ -18,6 +18,7 @@ import {
   type RuntimeForgetConnectedOrigin,
   type RuntimeGetConnectedOrigins,
   type RuntimeGetPendingRequests,
+  type RuntimeOpenWallet,
   type RuntimePendingRequest,
   type RuntimePendingRequestMessage,
   type RuntimeProviderRequest,
@@ -33,6 +34,7 @@ type RuntimeMessage =
   | RuntimeGetConnectedOrigins
   | RuntimeForgetConnectedOrigin
   | RuntimeBroadcastEvent
+  | RuntimeOpenWallet
 
 type RuntimeSender = {
   tab?: {
@@ -214,11 +216,12 @@ const updateActionBadge = async (): Promise<void> => {
 // Chrome only allows `action.openPopup` from a gesture-carrying event, and the window focused
 // when a dApp request lands is the SDK's toolbar-less picker, so the toolbar popup cannot be
 // opened from here. The wallet gets its own popup window instead, one at a time: `id` is the
-// window on screen, `opening` a create still in flight.
-const approvalWindow: { id?: number; opening?: Promise<void> } = {}
+// window on screen, `opening` a create still in flight. Two things open it: a queued request
+// waiting for the user, and a dApp calling `sdk.open()`.
+const walletWindow: { id?: number; opening?: Promise<void> } = {}
 
-const APPROVAL_WINDOW_WIDTH = 420
-const APPROVAL_WINDOW_HEIGHT = 640
+const WALLET_WINDOW_WIDTH = 420
+const WALLET_WINDOW_HEIGHT = 640
 
 const holds = (area: DisplayBounds, x: number, y: number): boolean =>
   x >= area.left && x < area.left + area.width && y >= area.top && y < area.top + area.height
@@ -236,7 +239,7 @@ const workAreas = async (): Promise<Array<{ area: DisplayBounds; isPrimary: bool
 // Centers the window on the display the user is actually on, which is the one holding the
 // middle of the focused browser window. Falls back to the primary display, and then to
 // undefined, meaning nothing to measure so Chrome picks the spot.
-const approvalWindowCenter = async (): Promise<{ left: number; top: number } | undefined> => {
+const walletWindowCenter = async (): Promise<{ left: number; top: number } | undefined> => {
   try {
     const [displays, focused] = await Promise.all([
       workAreas(),
@@ -252,47 +255,49 @@ const approvalWindowCenter = async (): Promise<{ left: number; top: number } | u
       displays.find((display) => display.isPrimary) ??
       displays[0]
     return {
-      left: Math.max(Math.round(area.left + (area.width - APPROVAL_WINDOW_WIDTH) / 2), 0),
-      top: Math.max(Math.round(area.top + (area.height - APPROVAL_WINDOW_HEIGHT) / 2), 0),
+      left: Math.max(Math.round(area.left + (area.width - WALLET_WINDOW_WIDTH) / 2), 0),
+      top: Math.max(Math.round(area.top + (area.height - WALLET_WINDOW_HEIGHT) / 2), 0),
     }
   } catch {
     return undefined
   }
 }
 
-const createApprovalWindow = async (): Promise<void> => {
+// `forRequest` marks a window opened to answer queued requests. One a dApp asked for through
+// `sdk.open()` has nothing pending behind it and must stay on screen.
+const createWalletWindow = async (forRequest: boolean): Promise<void> => {
   try {
     const created = await chromeApi?.windows?.create({
       url: chromeApi?.runtime?.getURL('index.html') ?? 'index.html',
       type: 'popup',
       focused: true,
-      width: APPROVAL_WINDOW_WIDTH,
-      height: APPROVAL_WINDOW_HEIGHT,
-      ...(await approvalWindowCenter()),
+      width: WALLET_WINDOW_WIDTH,
+      height: WALLET_WINDOW_HEIGHT,
+      ...(await walletWindowCenter()),
     })
     if (created?.id === undefined) {
       return
     }
     // Every request this window was for got answered while the create was still in flight
     // (the toolbar popup was already open, say): close it rather than pop it up over nothing.
-    if (pendingRequests.size === 0) {
+    if (forRequest && pendingRequests.size === 0) {
       await chromeApi?.windows?.remove(created.id)
       return
     }
-    approvalWindow.id = created.id
+    walletWindow.id = created.id
   } finally {
-    approvalWindow.opening = undefined
+    walletWindow.opening = undefined
   }
 }
 
-const openApprovalWindow = async (): Promise<void> => {
+const openWalletWindow = async (forRequest: boolean): Promise<void> => {
   // Claimed synchronously: two requests landing in the same tick must not each open a window.
-  if (approvalWindow.opening === undefined && approvalWindow.id === undefined) {
-    approvalWindow.opening = createApprovalWindow()
-    return approvalWindow.opening
+  if (walletWindow.opening === undefined && walletWindow.id === undefined) {
+    walletWindow.opening = createWalletWindow(forRequest)
+    return walletWindow.opening
   }
-  await approvalWindow.opening
-  const { id } = approvalWindow
+  await walletWindow.opening
+  const { id } = walletWindow
   if (id !== undefined) {
     await chromeApi?.windows?.update(id, { focused: true })
   }
@@ -300,9 +305,9 @@ const openApprovalWindow = async (): Promise<void> => {
 
 // Forgets the window before removing it so the `onRemoved` listener does not read a close
 // the wallet asked for as the user dismissing the prompt.
-const closeApprovalWindow = async (): Promise<void> => {
-  const { id } = approvalWindow
-  approvalWindow.id = undefined
+const closeWalletWindow = async (): Promise<void> => {
+  const { id } = walletWindow
+  walletWindow.id = undefined
   if (id === undefined) {
     return
   }
@@ -327,7 +332,7 @@ const queueProviderRequest = async (
   // Nothing here depends on the others, and the window is what the user is waiting for:
   // pushing to already-open views must not delay it.
   await Promise.all([
-    openApprovalWindow().catch(() => undefined),
+    openWalletWindow(true).catch(() => undefined),
     updateActionBadge().catch(() => undefined),
     notifyWalletViews(pending),
   ])
@@ -380,11 +385,21 @@ const handleProviderRequest = async (
   await queueProviderRequest(message, sendResponse)
 }
 
-chromeApi?.windows?.onRemoved.addListener((windowId) => {
-  if (windowId !== approvalWindow.id) {
+// `sdk.open()`, from a dApp the user has already connected. Any page can post the message
+// this arrives as, so an origin the user never approved gets nothing: opening a window is
+// visible to the user, and an unconnected page has no business doing it.
+const handleOpenWallet = async (message: RuntimeOpenWallet): Promise<void> => {
+  if (!(await isOriginConnected(message.origin))) {
     return
   }
-  approvalWindow.id = undefined
+  await openWalletWindow(false)
+}
+
+chromeApi?.windows?.onRemoved.addListener((windowId) => {
+  if (windowId !== walletWindow.id) {
+    return
+  }
+  walletWindow.id = undefined
   rejectPendingRequests()
 })
 
@@ -392,6 +407,12 @@ chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'CARPINCHO_PROVIDER_REQUEST') {
     void handleProviderRequest(message, sendResponse)
     return true
+  }
+
+  if (message.type === 'CARPINCHO_OPEN_WALLET') {
+    void handleOpenWallet(message)
+    sendResponse({ ok: true })
+    return false
   }
 
   if (message.type === 'CARPINCHO_GET_PENDING_REQUESTS') {
@@ -436,7 +457,7 @@ chromeApi?.runtime?.onMessage.addListener((message, _sender, sendResponse) => {
     ).catch(() => undefined)
     void updateActionBadge().catch(() => undefined)
     if (pendingRequests.size === 0) {
-      void closeApprovalWindow().catch(() => undefined)
+      void closeWalletWindow().catch(() => undefined)
     }
     sendResponse({ ok: true })
     return false

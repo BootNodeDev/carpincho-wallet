@@ -318,6 +318,43 @@ describe('background: answering the last request', () => {
   })
 })
 
+describe('background: CARPINCHO_OPEN_WALLET', () => {
+  before(resetWindowCalls)
+
+  it('ignores an origin the user never connected', async () => {
+    assert.ok(listener)
+    listener(
+      { type: 'CARPINCHO_OPEN_WALLET', origin: 'http://localhost:9999' },
+      {},
+      () => undefined,
+    )
+    await new Promise((resolve) => setTimeout(resolve, 25))
+
+    assert.deepEqual(createdWindows, [])
+  })
+
+  it('opens the wallet for a connected dApp and leaves it up with nothing pending', async () => {
+    assert.ok(listener)
+    listener(
+      { type: 'CARPINCHO_OPEN_WALLET', origin: 'http://localhost:4000' },
+      {},
+      () => undefined,
+    )
+    await waitFor(() => createdWindows.length >= 1)
+    await new Promise((resolve) => setTimeout(resolve, 25))
+
+    assert.equal(createdWindows.length, 1)
+    assert.equal(createdWindows[0].url, 'chrome-extension://test/index.html')
+    // No queued request is behind this window, so the "answered while opening" cleanup
+    // that closes a request window must not touch it.
+    assert.deepEqual(removedWindows, [])
+
+    // Leave the window closed for the next group
+    assert.ok(windowRemoved)
+    windowRemoved(APPROVAL_WINDOW_ID)
+  })
+})
+
 describe('background: nothing to tell which display the user is on', () => {
   before(resetWindowCalls)
 

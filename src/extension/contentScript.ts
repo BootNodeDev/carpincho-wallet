@@ -7,6 +7,7 @@ const WalletEvent = {
   SPLICE_WALLET_RESPONSE: 'SPLICE_WALLET_RESPONSE',
   SPLICE_WALLET_EXT_READY: 'SPLICE_WALLET_EXT_READY',
   SPLICE_WALLET_EXT_ACK: 'SPLICE_WALLET_EXT_ACK',
+  SPLICE_WALLET_EXT_OPEN: 'SPLICE_WALLET_EXT_OPEN',
 } as const
 
 const CANTON_REQUEST_PROVIDER_EVENT = 'canton:requestProvider'
@@ -36,6 +37,11 @@ interface RuntimeProviderRequest {
   origin: string
 }
 
+interface RuntimeOpenWallet {
+  type: 'CARPINCHO_OPEN_WALLET'
+  origin: string
+}
+
 interface SpliceWalletRequestMessage {
   type: typeof WalletEvent.SPLICE_WALLET_REQUEST
   request: JsonRpcRequest
@@ -56,6 +62,13 @@ interface SpliceWalletReadyMessage {
   target?: string
 }
 
+// What `sdk.open()` posts for a browser provider. It carries the `userUrl` read from status,
+// which this deliberately ignores: the background opens the extension's own page.
+interface SpliceWalletOpenMessage {
+  type: typeof WalletEvent.SPLICE_WALLET_EXT_OPEN
+  target?: string
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
@@ -64,6 +77,9 @@ const isForCarpincho = (message: { target?: unknown }): boolean =>
 
 const isSpliceWalletReady = (value: unknown): value is SpliceWalletReadyMessage =>
   isRecord(value) && value.type === WalletEvent.SPLICE_WALLET_EXT_READY
+
+const isSpliceWalletOpen = (value: unknown): value is SpliceWalletOpenMessage =>
+  isRecord(value) && value.type === WalletEvent.SPLICE_WALLET_EXT_OPEN
 
 const isSpliceWalletRequest = (value: unknown): value is SpliceWalletCallMessage =>
   isRecord(value) &&
@@ -104,7 +120,7 @@ type RuntimeApi = {
   id: string
   lastError?: { message?: string }
   sendMessage: (
-    message: RuntimeProviderRequest,
+    message: RuntimeProviderRequest | RuntimeOpenWallet,
     callback: (response?: JsonRpcResponse) => void,
   ) => void
   onMessage?: {
@@ -195,6 +211,13 @@ window.addEventListener('message', (event) => {
   const data = event.data as unknown
   if (isSpliceWalletReady(data) && isForCarpincho(data)) {
     window.postMessage(extensionAck(), '*')
+    return
+  }
+  if (isSpliceWalletOpen(data) && isForCarpincho(data)) {
+    runtime?.sendMessage(
+      { type: 'CARPINCHO_OPEN_WALLET', origin: window.location.origin },
+      () => undefined,
+    )
     return
   }
   if (!isSpliceWalletRequest(data) || !isForCarpincho(data)) {

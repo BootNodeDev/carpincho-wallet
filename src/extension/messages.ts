@@ -70,6 +70,14 @@ export interface RuntimeProviderResponse {
   response: JsonRpcResponse
 }
 
+// Page → content script → background: the dApp called `sdk.open()` and wants the wallet UI
+// on screen. Carries the asking origin, not the URL the page sent: the background opens its
+// own packaged page, so a page cannot aim this at anything else.
+export interface RuntimeOpenWallet {
+  type: 'CARPINCHO_OPEN_WALLET'
+  origin: string
+}
+
 export interface RuntimeGetPendingRequests {
   type: 'CARPINCHO_GET_PENDING_REQUESTS'
 }
