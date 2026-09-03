@@ -1,3 +1,5 @@
+import type { Cip103Event } from '@/provider/events'
+
 export const CARPINCHO_PROVIDER_ID = 'carpincho-wallet'
 export const CARPINCHO_PROVIDER_NAME = 'Carpincho Wallet'
 
@@ -82,16 +84,18 @@ export interface RuntimeForgetConnectedOrigin {
   origin: string
 }
 
-// Wallet→page broadcast: popup → background → content script → page.
+// Wallet→page broadcast: popup → background → content script → page. `eventName` is typed by
+// the shared CIP-0103 list the WalletConnect session declares, so this path cannot push an
+// event a dApp was never told to expect.
 export interface RuntimeBroadcastEvent {
   type: 'CARPINCHO_BROADCAST_EVENT'
-  eventName: string
+  eventName: Cip103Event
   payload: unknown
 }
 
 export interface RuntimeEventRelay {
   type: 'CARPINCHO_EVENT_RELAY'
-  eventName: string
+  eventName: Cip103Event
   payload: unknown
 }
 

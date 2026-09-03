@@ -24,6 +24,7 @@ import {
   type RuntimeProviderResponse,
 } from '@/extension/messages'
 import { readWalletSnapshot } from '@/extension/walletSnapshot'
+import type { Cip103Event } from '@/provider/events'
 
 type RuntimeMessage =
   | RuntimeProviderRequest
@@ -101,7 +102,7 @@ const chromeApi = (
 
 const sendToTabs = async (
   tabs: Array<{ id?: number }>,
-  eventName: string,
+  eventName: Cip103Event,
   payload: unknown,
 ): Promise<void> => {
   const relay: RuntimeEventRelay = { type: 'CARPINCHO_EVENT_RELAY', eventName, payload }
