@@ -64,7 +64,7 @@ export const SendConfirm = ({
   const request = { sender: account.partyId, instrumentId: summary.instrumentId?.id, ...shared }
 
   // A sent transfer leaves the sender's balance and joins the receiver's pending list, so the
-  // mutation refreshes both caches before the sheet closes.
+  // mutation refreshes both caches as soon as it lands.
   const submit = useMutation({
     mutationFn: async () => {
       if (summary.instrumentId?.id === undefined) {
@@ -78,7 +78,11 @@ export const SendConfirm = ({
         recordTransaction: vault.recordTransaction,
       })
     },
-    onSuccess: async () => await invalidateTokenState(queryClient, account),
+    // Not awaited: the transfer is already submitted, and the reads have no timeout, so
+    // waiting on them would leave a finished send stuck on "Sending..." with the sheet open.
+    onSuccess: () => {
+      void invalidateTokenState(queryClient, account)
+    },
   })
   const submitError = submit.error === null ? undefined : submit.error.message
 

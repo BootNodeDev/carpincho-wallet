@@ -72,7 +72,10 @@ export const UtilsList = ({ account, tapApi, onSelect }: UtilsListProps): JSX.El
         signMessage: vault.signMessage,
         recordTransaction: vault.recordTransaction,
       }),
-    onSuccess: async () => await invalidateTokenState(queryClient, account),
+    // Not awaited: the tap is done, so its progress toast must not wait on a read.
+    onSuccess: () => {
+      void invalidateTokenState(queryClient, account)
+    },
   })
 
   const onTap = async (): Promise<void> => {

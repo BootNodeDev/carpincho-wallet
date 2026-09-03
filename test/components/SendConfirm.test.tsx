@@ -1,11 +1,14 @@
 import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
+import { useQuery } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactNode } from 'react'
 import type { TokenHoldingSummary } from '@/cip56/holdings'
 import { SendConfirm } from '@/components/SendConfirm'
 import type { Cip56SendApi } from '@/components/SendTokenForm'
 import { toast } from '@/components/ui/toast'
+import { queryKeys } from '@/config/queryKeys'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import type { AccountPublic } from '@/vault/types'
 import { VaultContext, type VaultContextValue } from '@/vault/VaultContext'
@@ -51,10 +54,21 @@ const baseVault = (): VaultContextValue =>
     setAutoLockOption: () => undefined,
   }) as VaultContextValue
 
+// Registers the holdings read a sent transfer invalidates, with a fetch that never answers,
+// so the follow-up refresh cannot settle.
+const StalledHoldings = (): JSX.Element => {
+  useQuery({
+    queryKey: queryKeys.holdingSummaries(ACCOUNT),
+    queryFn: () => new Promise<never>(() => undefined),
+  })
+  return <span data-testid="stalled-holdings" />
+}
+
 const renderConfirm = (
   sendApi: Cip56SendApi,
   onSent: () => void,
   onCancel = (): void => undefined,
+  reads?: ReactNode,
 ): void => {
   render(
     <TestQueryClientProvider>
@@ -70,6 +84,7 @@ const renderConfirm = (
           onCancel={onCancel}
           onSent={onSent}
         />
+        {reads}
       </VaultContext.Provider>
     </TestQueryClientProvider>,
   )
@@ -102,6 +117,25 @@ describe('SendConfirm', () => {
     assert.equal(sent[0]?.memo, 'lunch')
     assert.deepEqual(sent[0]?.instrumentId, { admin: 'dso::party', id: 'Amulet' })
     assert.equal(typeof sent[0]?.expirationDate, 'string')
+  })
+
+  it('reports a sent transfer even when the follow-up refresh stalls', async () => {
+    // Scenario: the transfer lands but a holdings read hangs. Neither the success toast nor
+    // the close may wait on that read, or a completed send leaves the sheet stuck on
+    // "Sending..." with Cancel disabled.
+    let sentCount = 0
+    renderConfirm(
+      { createTokenTransfer: async () => ({ updateId: 'u1' }) },
+      () => (sentCount += 1),
+      () => undefined,
+      <StalledHoldings />,
+    )
+    await screen.findByTestId('stalled-holdings')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => assert.equal(sentCount, 1))
+    assert.equal(screen.getByTestId('send-confirm').textContent, 'Confirm')
   })
 
   it('exposes the request JSON behind a View data expander', () => {
