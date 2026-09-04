@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { after, before, beforeEach, describe, it } from 'node:test'
 import { act, cleanup, render } from '@testing-library/react'
+import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import type { VaultContextValue } from '@/vault/VaultContext'
 
 const originalChrome = (globalThis as { chrome?: unknown }).chrome
@@ -59,9 +60,11 @@ const unlockedVault = async (): Promise<{ current: VaultContextValue | null }> =
     return null
   }
   render(
-    <vault.VaultProvider>
-      <Probe />
-    </vault.VaultProvider>,
+    <TestQueryClientProvider>
+      <vault.VaultProvider>
+        <Probe />
+      </vault.VaultProvider>
+    </TestQueryClientProvider>,
   )
   await act(async () => {
     await ref.current?.setup('correct-horse-battery')

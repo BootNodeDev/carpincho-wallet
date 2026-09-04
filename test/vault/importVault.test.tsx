@@ -1,26 +1,12 @@
 import { strict as assert } from 'node:assert'
 import { afterEach, beforeEach, describe, it } from 'node:test'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup } from '@testing-library/react'
+import { installHostedParties } from '@/test-utils/hostedParties'
+import { captureVault } from '@/test-utils/vault'
 import { wrapBackup } from '@/vault/backup'
 import { encryptVault } from '@/vault/crypto'
 import { generateKeypair } from '@/vault/keypair'
 import type { CarpinchoBackup, ImportVaultResult, VaultEnvelope } from '@/vault/types'
-import { useVault } from '@/vault/useVault'
-import { type VaultContextValue, VaultProvider } from '@/vault/VaultContext'
-
-const captureVault = (): { ref: { current: VaultContextValue | null } } => {
-  const ref: { current: VaultContextValue | null } = { current: null }
-  const Probe = (): null => {
-    ref.current = useVault()
-    return null
-  }
-  render(
-    <VaultProvider>
-      <Probe />
-    </VaultProvider>,
-  )
-  return { ref }
-}
 
 const SOURCE_PW = 'staple-galaxy-printer'
 const DEST_PW = 'correct-horse-battery'
@@ -32,9 +18,15 @@ const makeBackup = async (
   wrapBackup(await encryptVault(password, JSON.stringify({ v: 1, accounts })))
 
 describe('VaultContext.importEncryptedVault', () => {
-  beforeEach(() => localStorage.clear())
+  let restoreFetch = (): void => undefined
+
+  beforeEach(() => {
+    localStorage.clear()
+    restoreFetch = installHostedParties()
+  })
   afterEach(() => {
     cleanup()
+    restoreFetch()
     localStorage.clear()
   })
 
@@ -244,25 +236,24 @@ describe('VaultContext.importEncryptedVault', () => {
     assert.deepEqual(result, { imported: 1, skipped: 1, rejected: 1 })
   })
 
-  it('imports the same party id on another network as a new account', async () => {
-    // A party is hosted on one network; the same id elsewhere is a different party, so it is
-    // not the duplicate the dedupe is for.
-    const local = await generateKeypair()
-    const devnet = await generateKeypair()
+  it('skips a party id the vault already holds, whatever network label it carries', async () => {
+    // A party id carries the fingerprint of the key that made it, so the same id is the same
+    // account — even when the two entries were saved under different names for the network.
+    const alice = await generateKeypair()
     const backup = await makeBackup(SOURCE_PW, [
       {
         name: 'alice',
         partyId: 'alice::ns',
-        publicKeyBase64: local.publicKeyBase64,
-        privateKeyHex: local.privateKeyHex,
+        publicKeyBase64: alice.publicKeyBase64,
+        privateKeyHex: alice.privateKeyHex,
         network: 'canton:local',
       },
       {
-        name: 'alice',
+        name: 'alice-again',
         partyId: 'alice::ns',
-        publicKeyBase64: devnet.publicKeyBase64,
-        privateKeyHex: devnet.privateKeyHex,
-        network: 'canton:devnet',
+        publicKeyBase64: alice.publicKeyBase64,
+        privateKeyHex: alice.privateKeyHex,
+        network: 'canton:localnet',
       },
     ])
     const { ref } = captureVault()
@@ -273,11 +264,11 @@ describe('VaultContext.importEncryptedVault', () => {
     await act(async () => {
       result = await ref.current?.importEncryptedVault(backup, SOURCE_PW)
     })
-    assert.deepEqual(result, { imported: 2, skipped: 0, rejected: 0 })
-    assert.deepEqual(ref.current?.accounts.map((a) => a.network).sort(), [
-      'canton:devnet',
-      'canton:local',
-    ])
+    assert.deepEqual(result, { imported: 1, skipped: 1, rejected: 0 })
+    assert.deepEqual(
+      ref.current?.accounts.map((a) => a.name),
+      ['alice'],
+    )
   })
 
   it('persists every account from a multi-account batch in one re-encryption', async () => {

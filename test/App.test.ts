@@ -5,7 +5,7 @@ import type { VaultContextValue } from '@/vault/VaultContext'
 
 type RoutingState = Pick<
   VaultContextValue,
-  'isLoading' | 'hasVault' | 'isLocked' | 'accounts' | 'offNetworkCount'
+  'isLoading' | 'hasVault' | 'isLocked' | 'accounts' | 'hostedElsewhereCount'
 >
 
 const state = (overrides: Partial<RoutingState> = {}): RoutingState => ({
@@ -13,7 +13,7 @@ const state = (overrides: Partial<RoutingState> = {}): RoutingState => ({
   hasVault: false,
   isLocked: false,
   accounts: [],
-  offNetworkCount: 0,
+  hostedElsewhereCount: 0,
   ...overrides,
 })
 
@@ -46,7 +46,9 @@ describe('selectShellView routing', () => {
     // An endpoint switch, not a first run: the vault and RPC steps are already done, so the
     // stepper would only stand in the way of the one thing left to do.
     assert.equal(
-      selectShellView(state({ hasVault: true, isLocked: false, accounts: [], offNetworkCount: 2 })),
+      selectShellView(
+        state({ hasVault: true, isLocked: false, accounts: [], hostedElsewhereCount: 2 }),
+      ),
       'add-network-account',
     )
   })

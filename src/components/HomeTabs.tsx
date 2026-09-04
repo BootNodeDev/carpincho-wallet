@@ -7,7 +7,7 @@ import { TabContent, Tabs, TabsList, TabTrigger } from '@/components/ui/Tabs'
 import type { AmuletPreapprovalApi } from '@/hooks/useAmuletPreapproval'
 import type { Cip56TransferApi } from '@/hooks/usePendingCip56Transfers'
 import type { Cip56HoldingsApi } from '@/hooks/useTokenHoldings'
-import { recordBelongsToAccount } from '@/vault/networkScope'
+import { recordBelongsToAccount } from '@/vault/accountScope'
 import type { AccountPublic, TransactionRecord } from '@/vault/types'
 
 interface HomeTabsProps {

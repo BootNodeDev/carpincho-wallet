@@ -1,38 +1,29 @@
 import { strict as assert } from 'node:assert'
 import { afterEach, beforeEach, describe, it } from 'node:test'
-import { act, cleanup, render } from '@testing-library/react'
-import { NetworkContext } from '@/network/NetworkContext'
+import { act, cleanup } from '@testing-library/react'
+import { installHostedParties } from '@/test-utils/hostedParties'
+import { captureVault } from '@/test-utils/vault'
 import { decryptVault } from '@/vault/crypto'
 import type { CarpinchoBackup, VaultEnvelope } from '@/vault/types'
-import { useVault } from '@/vault/useVault'
-import { type VaultContextValue, VaultProvider } from '@/vault/VaultContext'
 
 // addAccount stamps the network the endpoint in use reports, so the vault needs one reported.
-const captureVault = (): { ref: { current: VaultContextValue | null } } => {
-  const ref: { current: VaultContextValue | null } = { current: null }
-  const Probe = (): null => {
-    ref.current = useVault()
-    return null
-  }
-  render(
-    <NetworkContext.Provider value={{ connected: true, networkId: 'canton:local' }}>
-      <VaultProvider>
-        <Probe />
-      </VaultProvider>
-    </NetworkContext.Provider>,
-  )
-  return { ref }
-}
+const NETWORK = 'canton:local'
 
 describe('VaultContext.exportEncryptedVault', () => {
-  beforeEach(() => localStorage.clear())
+  let restoreFetch = (): void => undefined
+
+  beforeEach(() => {
+    localStorage.clear()
+    restoreFetch = installHostedParties()
+  })
   afterEach(() => {
     cleanup()
+    restoreFetch()
     localStorage.clear()
   })
 
   it('produces a carpincho-backup whose ciphertext decrypts to the account envelope', async () => {
-    const { ref } = captureVault()
+    const { ref } = captureVault(NETWORK)
     await act(async () => {
       await ref.current?.setup('correct-horse-battery')
       await ref.current?.addAccount({
@@ -59,11 +50,11 @@ describe('VaultContext.exportEncryptedVault', () => {
     assert.equal(envelope.accounts.length, 1)
     assert.equal(envelope.accounts[0]?.partyId, 'alice::ns')
     assert.equal(envelope.accounts[0]?.privateKeyHex, 'aa'.repeat(32))
-    assert.equal(envelope.accounts[0]?.network, 'canton:local')
+    assert.equal(envelope.accounts[0]?.network, NETWORK)
   })
 
   it('throws when the typed password is not the current vault password', async () => {
-    const { ref } = captureVault()
+    const { ref } = captureVault(NETWORK)
     await act(async () => {
       await ref.current?.setup('correct-horse-battery')
     })
@@ -74,7 +65,7 @@ describe('VaultContext.exportEncryptedVault', () => {
   })
 
   it('throws when the vault is locked', async () => {
-    const { ref } = captureVault()
+    const { ref } = captureVault(NETWORK)
     await act(async () => {
       await ref.current?.setup('correct-horse-battery')
       ref.current?.lock()

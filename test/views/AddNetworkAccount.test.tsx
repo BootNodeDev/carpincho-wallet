@@ -17,7 +17,7 @@ const baseVault = (overrides: Partial<VaultContextValue> = {}): VaultContextValu
     hasVault: true,
     accounts: [],
     primary: null,
-    offNetworkCount: 1,
+    hostedElsewhereCount: 1,
     transactions: [],
     addAccount: async () => undefined,
     ...overrides,
@@ -59,7 +59,7 @@ describe('AddNetworkAccount', () => {
   })
 
   it('asks for an account on this network, in the card rather than as a toast', () => {
-    renderView({ offNetworkCount: 2 })
+    renderView({ hostedElsewhereCount: 2 })
     assert.ok(screen.getByTestId('add-account-hint-input'))
     assert.ok(
       /no account on this network/i.test(

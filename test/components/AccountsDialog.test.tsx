@@ -37,7 +37,7 @@ const baseVault = (overrides: Partial<VaultContextValue> = {}): VaultContextValu
     destroyVault: () => undefined,
     accounts: [ACCT_A, ACCT_B],
     primary: ACCT_A,
-    offNetworkCount: 0,
+    hostedElsewhereCount: 0,
     transactions: [],
     setPrimary: async () => undefined,
     addAccount: async () => ({
@@ -189,7 +189,7 @@ describe('AccountsDialog', () => {
   it('lists no account the network in use does not host, and says nothing about them', async () => {
     // The vault keeps them for when the user switches back, but the switcher is about the
     // accounts that work here.
-    renderDialog({ accounts: [ACCT_A, ACCT_B], primary: ACCT_A, offNetworkCount: 2 })
+    renderDialog({ accounts: [ACCT_A, ACCT_B], primary: ACCT_A, hostedElsewhereCount: 2 })
     const dialog = await screen.findByRole('dialog')
     assert.equal(within(dialog).getAllByTestId('account-item').length, 1)
     assert.equal(/other network/i.test(dialog.textContent ?? ''), false)
