@@ -104,8 +104,9 @@ export const walletServiceStatus = async (
 export const isCantonConnected = (status: WalletServiceStatusResponse): boolean =>
   status.connection?.isNetworkConnected === true
 
-// The one reading of the reported network id, so the value that scopes accounts is always the
-// value stored on them: trimmed, and undefined when wallet-service named no network at all.
+// The one reading of the reported network id: trimmed, and undefined when the response carries
+// none. wallet-service always names a network, so undefined here means the poll has not answered
+// yet or the endpoint is not a wallet-service — not a wallet-service running without a name.
 export const networkIdFromStatus = (status: WalletServiceStatusResponse): string | undefined => {
   const networkId = status.network?.networkId?.trim()
   return networkId === '' ? undefined : networkId
