@@ -1,10 +1,14 @@
 import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
-import { act, cleanup, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { useWalletServiceTest } from '@/hooks/useWalletServiceTest'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
 
 const originalFetch = globalThis.fetch
+
+// `mutateAsync` resolving does not mean the hook has re-rendered with the result: React Query
+// publishes mutation state through its own batched notify, so the awaited promise can win the
+// race and leave the hook still reading `idle`. Assert through waitFor, not on the next line.
 
 const respond = (result: unknown): void => {
   globalThis.fetch = async () => new Response(JSON.stringify({ result }), { status: 200 })
@@ -24,7 +28,7 @@ describe('useWalletServiceTest', () => {
     await act(async () => {
       await result.current.test('http://host/rpc')
     })
-    assert.equal(result.current.state, 'connected')
+    await waitFor(() => assert.equal(result.current.state, 'connected'))
     assert.equal(result.current.networkId, 'canton:local')
     assert.equal(result.current.testedUrl, 'http://host/rpc')
   })
@@ -37,7 +41,7 @@ describe('useWalletServiceTest', () => {
     await act(async () => {
       await result.current.test('http://host/rpc')
     })
-    assert.equal(result.current.state, 'not-connected')
+    await waitFor(() => assert.equal(result.current.state, 'not-connected'))
     assert.equal(result.current.reason, 'syncing')
     assert.equal(result.current.testedUrl, 'http://host/rpc')
   })
@@ -52,7 +56,7 @@ describe('useWalletServiceTest', () => {
     await act(async () => {
       await result.current.test('http://host/rpc')
     })
-    assert.equal(result.current.state, 'unreachable')
+    await waitFor(() => assert.equal(result.current.state, 'unreachable'))
     assert.equal(result.current.reason, 'Failed to fetch')
     assert.equal(result.current.testedUrl, 'http://host/rpc')
   })
@@ -99,7 +103,7 @@ describe('useWalletServiceTest', () => {
       await stale
     })
 
-    assert.equal(result.current.state, 'connected')
+    await waitFor(() => assert.equal(result.current.state, 'connected'))
     assert.equal(result.current.networkId, 'canton:local')
     assert.equal(result.current.testedUrl, 'http://fresh/rpc')
   })

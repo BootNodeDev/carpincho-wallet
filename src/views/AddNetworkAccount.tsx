@@ -32,8 +32,8 @@ export const AddNetworkAccount = (): JSX.Element => {
           layout="compact"
         />
         {/* Create only, no restore tab: the vault already holds accounts, so its own backup
-            would import nothing here — every entry is a party-and-network duplicate. Restore
-            stays in the drawer, and in first-run onboarding where the vault is empty. */}
+            would import nothing here — every entry is a party it already holds. Restore stays
+            in the drawer, and in first-run onboarding where the vault is empty. */}
         <Card>
           <p
             data-testid="no-account-for-network"

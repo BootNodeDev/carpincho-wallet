@@ -16,12 +16,13 @@ interface UseWalletServiceStatusOptions {
 const DEFAULT_POLL_MS = 5000
 
 // Nothing is known about the endpoint yet, which is also how an endpoint that names no network
-// reads. Callers scope on `networkId`, so this is the "scope nothing" state.
+// reads. There is no label to report in either case.
 export const UNKNOWN_NETWORK_STATUS: WalletServiceStatus = { connected: false }
 
 // A poll that failed says nothing about which network the endpoint is on, only that it did not
-// answer this time. Keeping the network it last named stops a transient failure from un-scoping
-// the vault (and telling every connected dApp about accounts it cannot use) for one interval.
+// answer this time. Keeping the network it last named stops a transient failure from blanking
+// the label every account is offered under, and from moving the hosting query key for one
+// interval.
 const unreachableStatus = (last: WalletServiceStatus, reason: string): WalletServiceStatus => ({
   connected: false,
   ...(last.networkId === undefined ? {} : { networkId: last.networkId }),

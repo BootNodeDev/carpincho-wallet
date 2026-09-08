@@ -26,14 +26,14 @@ export type ShellView = 'loading' | 'unlock' | 'onboarding' | 'add-network-accou
 export const selectShellView = (
   v: Pick<
     VaultContextValue,
-    'isLoading' | 'hasVault' | 'isLocked' | 'accounts' | 'offNetworkCount'
+    'isLoading' | 'hasVault' | 'isLocked' | 'accounts' | 'hostedElsewhereCount'
   >,
 ): ShellView => {
   if (v.isLoading) return 'loading'
   if (!v.hasVault) return 'onboarding'
   if (v.isLocked) return 'unlock'
   if (v.accounts.length > 0) return 'home'
-  return v.offNetworkCount > 0 ? 'add-network-account' : 'onboarding'
+  return v.hostedElsewhereCount > 0 ? 'add-network-account' : 'onboarding'
 }
 
 const Shell = (): JSX.Element => {

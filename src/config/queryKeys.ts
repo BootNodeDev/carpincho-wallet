@@ -33,6 +33,14 @@ export const queryKeys = {
     ...scope(account),
   ],
   activeContracts: (partyId: string): string[] => ['ledger', 'activeContracts', partyId],
+  // Party ids are sorted so the key does not move when the vault's account order does, and
+  // joined so the factory still returns the `string[]` every other entry here returns.
+  // The reported network id is part of it, so a relabelled endpoint re-asks the ledger at once.
+  hostedParties: (
+    url: string,
+    networkId: string | undefined,
+    partyIds: readonly string[],
+  ): string[] => ['ledger', 'hostedParties', url, networkId ?? '', [...partyIds].sort().join(',')],
   walletServiceStatus: (url: string): string[] => ['walletService', 'status', url],
   endpointReachability: (url: string): string[] => ['walletService', 'reachability', url],
 }

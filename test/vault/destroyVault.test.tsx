@@ -1,26 +1,11 @@
 import { strict as assert } from 'node:assert'
 import { afterEach, beforeEach, describe, it } from 'node:test'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup } from '@testing-library/react'
 import { DIRECT_CONNECTED_ORIGINS_KEY } from '@/extension/directConnections'
-import { useVault } from '@/vault/useVault'
-import { type VaultContextValue, VaultProvider } from '@/vault/VaultContext'
+import { captureVault } from '@/test-utils/vault'
 import { WALLET_CONNECT_DB } from '@/wc/storage'
 
 const originalChrome = (globalThis as { chrome?: unknown }).chrome
-
-const captureVault = (): { ref: { current: VaultContextValue | null } } => {
-  const ref: { current: VaultContextValue | null } = { current: null }
-  const Probe = (): null => {
-    ref.current = useVault()
-    return null
-  }
-  render(
-    <VaultProvider>
-      <Probe />
-    </VaultProvider>,
-  )
-  return { ref }
-}
 
 describe('VaultContext.destroyVault full wipe', () => {
   let reloads = 0

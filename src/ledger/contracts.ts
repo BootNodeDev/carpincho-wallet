@@ -1,5 +1,5 @@
 import { type ExecutePreparedResponse, executePreparedCommands } from '@/api/interactiveSubmission'
-import { walletServiceRequest } from '@/api/walletService'
+import { ledgerApi } from '@/ledger/ledgerApi'
 import type { AccountPublic } from '@/vault/types'
 import type { VaultContextValue } from '@/vault/VaultContext'
 
@@ -123,13 +123,6 @@ export const exerciseContract = async ({
     signMessage,
     recordTransaction,
   })
-
-// Calls the participant JSON API through wallet-service so Carpincho never stores ledger tokens.
-const ledgerApi = async <T>(params: {
-  requestMethod: 'get' | 'post'
-  resource: string
-  body?: Record<string, unknown>
-}): Promise<T> => await walletServiceRequest<T>('ledgerApi', params)
 
 // Reads the current ledger end because active-contract queries require an explicit snapshot offset.
 const ledgerEnd = async (): Promise<number> => {
