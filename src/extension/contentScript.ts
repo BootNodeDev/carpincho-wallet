@@ -1,3 +1,4 @@
+import { chromeRuntime, sendRuntimeMessage } from '@/extension/chromeRuntime'
 import {
   announcedProvider,
   CANTON_ANNOUNCE_PROVIDER_EVENT,
@@ -23,22 +24,8 @@ import {
 const isWalletMessage = (value: unknown, type: string): value is { target?: string } =>
   isRecord(value) && value.type === type
 
-type RuntimeApi = {
-  id: string
-  lastError?: { message?: string }
-  sendMessage: (
-    message: RuntimeProviderRequest | RuntimeOpenWallet,
-    callback: (response?: JsonRpcResponse) => void,
-  ) => void
-  onMessage?: {
-    addListener: (listener: (message: unknown) => void) => void
-  }
-}
-
-const runtime = (globalThis as { chrome?: { runtime?: RuntimeApi } }).chrome?.runtime
-
 const announceProvider = (): void => {
-  if (runtime === undefined) {
+  if (chromeRuntime() === undefined) {
     return
   }
   window.dispatchEvent(
@@ -46,30 +33,12 @@ const announceProvider = (): void => {
   )
 }
 
-const runtimeRequest = async (message: RuntimeProviderRequest): Promise<JsonRpcResponse> =>
-  await new Promise<JsonRpcResponse>((resolve, reject) => {
-    if (runtime === undefined) {
-      reject(new Error('Carpincho extension runtime is not available'))
-      return
-    }
-    runtime.sendMessage(message, (response) => {
-      const lastError = runtime.lastError
-      if (lastError !== undefined) {
-        reject(new Error(lastError.message ?? 'Carpincho extension runtime failed'))
-        return
-      }
-      if (response === undefined) {
-        reject(new Error('Carpincho extension returned no response'))
-        return
-      }
-      resolve(response)
-    })
-  })
-
-// Fire and forget: `sdk.open()` waits for nothing. The callback is there to read
-// `runtime.lastError`, which is what stops Chrome logging it into the dApp's console.
+// Fire and forget: `sdk.open()` waits for nothing, so this does not go through
+// `sendRuntimeMessage`. The callback is there to read `runtime.lastError`, which is what stops
+// Chrome logging it into the dApp's console.
 const runtimeNotify = (message: RuntimeOpenWallet): void => {
-  runtime?.sendMessage(message, () => runtime?.lastError)
+  const api = chromeRuntime()
+  api?.sendMessage?.(message, () => api.lastError)
 }
 
 const postResponse = (response: JsonRpcResponse): void => {
@@ -94,7 +63,7 @@ const forwardEventToPage = (message: RuntimeEventRelay): void => {
   window.postMessage(out, '*')
 }
 
-runtime?.onMessage?.addListener((message: unknown) => {
+chromeRuntime()?.onMessage?.addListener((message: unknown) => {
   if (isRuntimeEventRelay(message)) {
     forwardEventToPage(message)
   }
@@ -126,11 +95,11 @@ window.addEventListener('message', (event) => {
   if (!isSpliceWalletRequest(data) || !isForCarpincho(data)) {
     return
   }
-  void runtimeRequest({
+  void sendRuntimeMessage<JsonRpcResponse>({
     type: 'CARPINCHO_PROVIDER_REQUEST',
     request: data.request,
     origin: window.location.origin,
-  })
+  } satisfies RuntimeProviderRequest)
     .then(postResponse)
     .catch((error) => {
       postResponse(jsonRpcError(data.request.id, -32000, (error as Error).message))

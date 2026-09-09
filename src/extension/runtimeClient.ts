@@ -1,9 +1,11 @@
+import { chromeRuntime, sendRuntimeMessage } from '@/extension/chromeRuntime'
 import {
   clearDirectConnectedOrigins,
   DIRECT_CONNECTED_ORIGINS_KEY,
   storedOrigins,
 } from '@/extension/directConnections'
 import {
+  isRecord,
   jsonRpcError,
   jsonRpcResult,
   type RuntimeDisconnectDapps,
@@ -30,42 +32,7 @@ const sessionStorageOnChanged = (): SessionStorageChangedEvent | undefined =>
     }
   ).chrome?.storage?.session?.onChanged
 
-type RuntimeListener = (message: unknown) => void
-
-type RuntimeApi = {
-  sendMessage?: (message: unknown, callback: (response?: unknown) => void) => void
-  lastError?: { message?: string }
-  onMessage?: {
-    addListener: (listener: RuntimeListener) => void
-    removeListener: (listener: RuntimeListener) => void
-  }
-}
-
-const runtime = (): RuntimeApi | undefined =>
-  (globalThis as { chrome?: { runtime?: RuntimeApi } }).chrome?.runtime
-
-export const isExtensionRuntime = (): boolean => runtime()?.sendMessage !== undefined
-
-const sendRuntimeMessage = async <T>(message: unknown): Promise<T> =>
-  await new Promise<T>((resolve, reject) => {
-    const api = runtime()
-    if (api?.sendMessage === undefined) {
-      reject(new Error('Carpincho extension runtime is not available'))
-      return
-    }
-    api.sendMessage(message, (response) => {
-      const lastError = api.lastError
-      if (lastError !== undefined) {
-        reject(new Error(lastError.message ?? 'Carpincho extension runtime failed'))
-        return
-      }
-      if (response === undefined) {
-        reject(new Error('Carpincho extension runtime returned no response'))
-        return
-      }
-      resolve(response as T)
-    })
-  })
+export const isExtensionRuntime = (): boolean => chromeRuntime()?.sendMessage !== undefined
 
 export const getPendingProviderRequests = async (): Promise<RuntimePendingRequest[]> =>
   await sendRuntimeMessage<RuntimePendingRequest[]>({
@@ -117,22 +84,17 @@ export const createRuntimeResponder = (pending: RuntimePendingRequest): Provider
 export const subscribeToPendingProviderRequests = (
   cb: (pending: RuntimePendingRequest) => void,
 ): (() => void) => {
-  const api = runtime()
-  const onMessage = api?.onMessage
+  const onMessage = chromeRuntime()?.onMessage
   if (onMessage === undefined) {
     return () => undefined
   }
   const listener = (message: unknown): void => {
-    if (
-      typeof message === 'object' &&
-      message !== null &&
-      (message as RuntimePendingRequestMessage).type === 'CARPINCHO_PENDING_REQUEST'
-    ) {
-      cb((message as RuntimePendingRequestMessage).pending)
+    if (isRecord(message) && message.type === 'CARPINCHO_PENDING_REQUEST') {
+      cb(message.pending as RuntimePendingRequestMessage['pending'])
     }
   }
   onMessage.addListener(listener)
-  return () => onMessage.removeListener(listener)
+  return () => onMessage.removeListener?.(listener)
 }
 
 // Subscribes to session-storage writes so the popup footer tracks direct dApp connection state.
