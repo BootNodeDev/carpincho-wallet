@@ -228,7 +228,7 @@ describe('MenuSheet', () => {
     assert.ok(screen.getByPlaceholderText('wc:...'))
   })
 
-  it('hides the WalletConnect entry in extension mode', () => {
+  it('hides the WalletConnect entry in extension mode and offers Connected dApps instead', () => {
     const originalChrome = (globalThis as { chrome?: unknown }).chrome
     ;(globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage: () => undefined } }
     try {
@@ -242,10 +242,23 @@ describe('MenuSheet', () => {
         ),
       )
       assert.equal(screen.queryByRole('button', { name: /walletconnect/i }), null)
-      assert.ok(screen.getByRole('button', { name: /^vault$/i }))
+      assert.ok(screen.getByRole('button', { name: /^connected dapps$/i }))
     } finally {
       ;(globalThis as { chrome?: unknown }).chrome = originalChrome
     }
+  })
+
+  it('hides the Connected dApps entry in web mode', () => {
+    render(
+      wrap(
+        baseVault(),
+        <MenuSheet
+          open={true}
+          onOpenChange={() => undefined}
+        />,
+      ),
+    )
+    assert.equal(screen.queryByRole('button', { name: /^connected dapps$/i }), null)
   })
 
   it('keeps the root drawer title accessible but visually hidden', () => {
