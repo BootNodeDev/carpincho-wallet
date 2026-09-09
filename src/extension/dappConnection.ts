@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import {
-  getDirectConnectedOrigins,
-  subscribeToDirectConnectedOrigins,
-} from '@/extension/runtimeClient'
+import { useDirectConnectedOrigins } from '@/hooks/useDirectConnectedOrigins'
 import type { ConnectedDappSession } from '@/wc/client'
 
 interface ChromeTab {
@@ -37,6 +34,9 @@ interface DappConnectionSources {
   directConnectedOrigins?: string[]
   activeTab?: ChromeTab
 }
+
+// Stands in for a list still unknown, and keeps one identity so the memo below holds.
+const NO_ORIGINS: string[] = []
 
 // Reads the Chrome runtime only when the popup is running inside the extension.
 const chromeApi = (): ChromeApi | undefined => (globalThis as { chrome?: ChromeApi }).chrome
@@ -142,7 +142,9 @@ export const useExtensionDappConnection = (
 ): DappConnectionStatus => {
   const { extensionMode, sessions } = sources
   const [activeTab, setActiveTab] = useState<ChromeTab | undefined>(sources.activeTab)
-  const [runtimeConnectedOrigins, setRuntimeConnectedOrigins] = useState<string[]>([])
+  const runtimeConnectedOrigins = useDirectConnectedOrigins(
+    extensionMode && sources.directConnectedOrigins === undefined,
+  )
 
   useEffect(() => {
     if (!extensionMode) {
@@ -151,33 +153,10 @@ export const useExtensionDappConnection = (
     void queryActiveTab().then(setActiveTab)
   }, [extensionMode])
 
-  useEffect(() => {
-    if (!extensionMode || sources.directConnectedOrigins !== undefined) {
-      return
-    }
-    let mounted = true
-    let changeSeq = 0
-    const seqAtRequest = changeSeq
-    const unsubscribe = subscribeToDirectConnectedOrigins((origins) => {
-      changeSeq += 1
-      if (mounted) {
-        setRuntimeConnectedOrigins(origins)
-      }
-    })
-    void getDirectConnectedOrigins()
-      .then((origins) => {
-        if (mounted && changeSeq === seqAtRequest) {
-          setRuntimeConnectedOrigins(origins)
-        }
-      })
-      .catch(() => undefined)
-    return () => {
-      mounted = false
-      unsubscribe()
-    }
-  }, [extensionMode, sources.directConnectedOrigins])
-
-  const directConnectedOrigins = sources.directConnectedOrigins ?? runtimeConnectedOrigins
+  // A list still unknown reads as nothing connected, so the footer never claims a connection
+  // before the first read lands.
+  const directConnectedOrigins =
+    sources.directConnectedOrigins ?? runtimeConnectedOrigins ?? NO_ORIGINS
 
   return useMemo(
     () => dappConnectionFromSources({ extensionMode, sessions, directConnectedOrigins, activeTab }),
