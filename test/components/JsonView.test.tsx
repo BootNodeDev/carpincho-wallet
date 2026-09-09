@@ -6,10 +6,11 @@ import { JsonView } from '@/components/ui/JsonView'
 describe('JsonView', () => {
   afterEach(cleanup)
 
-  it('renders object keys and values', () => {
+  it('renders object keys and values', async () => {
     render(<JsonView value={{ admin: 'alice::party' }} />)
+    // The json tree is imported on demand, so the first frame is the Suspense fallback.
     // key renders in .w-rjv-object-key; value renders in .w-rjv-value — both are leaf spans
-    assert.ok(screen.getByText(/admin/))
+    assert.ok(await screen.findByText(/admin/))
     assert.ok(
       screen.getAllByText((_t, node) => node?.textContent?.includes('alice::party') ?? false)
         .length > 0,
