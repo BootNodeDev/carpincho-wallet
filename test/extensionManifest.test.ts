@@ -28,6 +28,9 @@ describe('extension packaging', () => {
     assert.equal(manifest.icons?.['128'], 'icons/carpincho-128.png')
     assert.ok(manifest.permissions?.includes('storage'))
     assert.ok(manifest.permissions?.includes('activeTab'))
+    // Connected dApp rows read their icon from Chrome's favicon cache instead of asking each
+    // dApp's server for one; without this the popup shows monograms only.
+    assert.ok(manifest.permissions?.includes('favicon'))
     assert.ok(manifest.host_permissions?.includes('<all_urls>'))
   })
 

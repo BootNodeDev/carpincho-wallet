@@ -1,3 +1,4 @@
+import { toast } from '@/components/ui/toast'
 import { chromeRuntime, sendRuntimeMessage } from '@/extension/chromeRuntime'
 import {
   clearDirectConnectedOrigins,
@@ -34,6 +35,21 @@ const sessionStorageOnChanged = (): SessionStorageChangedEvent | undefined =>
 
 export const isExtensionRuntime = (): boolean => chromeRuntime()?.sendMessage !== undefined
 
+// Not on `ChromeRuntime`, which the content script shares and keeps to the message members.
+const runtimeGetURL = (): ((path: string) => string) | undefined =>
+  (globalThis as { chrome?: { runtime?: { getURL?: (path: string) => string } } }).chrome?.runtime
+    ?.getURL
+
+// The site's icon out of Chrome's own favicon cache (the `favicon` permission). It is whatever
+// the page declared, however it declared it, and reading it asks the dApp's server for nothing.
+// Undefined off the extension, where there is no cache to read.
+export const faviconUrl = (pageUrl: string): string | undefined => {
+  const getURL = runtimeGetURL()
+  return getURL === undefined
+    ? undefined
+    : `${getURL('/_favicon/')}?${new URLSearchParams({ pageUrl, size: '32' }).toString()}`
+}
+
 export const getPendingProviderRequests = async (): Promise<RuntimePendingRequest[]> =>
   await sendRuntimeMessage<RuntimePendingRequest[]>({
     type: 'CARPINCHO_GET_PENDING_REQUESTS',
@@ -51,6 +67,14 @@ export const forgetConnectedOrigin = async (origin: string): Promise<string[]> =
     type: 'CARPINCHO_FORGET_CONNECTED_ORIGIN',
     origin,
   } satisfies RuntimeForgetConnectedOrigin)
+
+// Disconnect as the two surfaces that offer one fire it: nothing to await, and a failure reported
+// the same way in both. The background tells the dApp before forgetting it.
+export const disconnectOrigin = (origin: string): void => {
+  void forgetConnectedOrigin(origin).catch((err: Error) =>
+    toast.error(`Disconnect failed: ${err.message}`),
+  )
+}
 
 // Vault reset. Off the extension there is nobody to tell, so it just drops the in-memory
 // origins the fallback keeps.
