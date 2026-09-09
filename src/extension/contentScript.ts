@@ -100,8 +100,13 @@ runtime?.onMessage?.addListener((message: unknown) => {
   }
 })
 
+// Only on request. Announcing at load would hand every site the user visits the wallet's full
+// identity, icon included, without being asked; the SDK's `requestAnnouncedProviders()`
+// dispatches this event, so discovery still finds Carpincho. Nothing else may reintroduce that
+// disclosure: a page-world `window.canton` marker would hand the same fact to any script that
+// enumerates `window`, and it only shortens the handshake in the case that is already fast,
+// since a wallet that is not installed sets no global and still costs the full 2 s timeout.
 window.addEventListener(CANTON_REQUEST_PROVIDER_EVENT, announceProvider)
-queueMicrotask(announceProvider)
 
 window.addEventListener('message', (event) => {
   if (event.source !== window) {
