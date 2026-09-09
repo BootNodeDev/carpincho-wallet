@@ -85,6 +85,7 @@ Accounts are scoped to the parties that endpoint hosts. A Canton party can only 
 - **DOM environment:** `@happy-dom/global-registrator` bootstrapped in [`test/setup-dom.ts`](test/setup-dom.ts) for React Testing Library interaction tests
 - **Test config:** [`test/tsconfig.json`](test/tsconfig.json) sets `jsx: react-jsx`; `TSX_TSCONFIG_PATH` in the test script points tsx at it
 - **Run tests:** `pnpm test`
+- **Types in tests are gated too:** `pnpm run typecheck` runs `tsc -b` over the app and node projects, then `tsc -p test/tsconfig.json` over the tests. It is a second `tsc` call rather than a project reference because `tsc -b` would need `composite: true`, which cannot be combined with `noEmit`. `tsx` erases types without checking them, so without this step a test could hold a type error and still pass; keep test stubs compiling rather than widening a cast to silence one
 - **What to test:** Business logic, API integrations, component behavior
 - **What not to test:** Styling, third-party library internals, trivial getters/setters
 - **Coverage:** Aim for meaningful coverage, not a number. Cover the paths that matter.
