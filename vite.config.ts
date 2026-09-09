@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig, type Plugin } from 'vite'
+import { build, defineConfig, type Plugin } from 'vite'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -26,6 +26,50 @@ const walletIconDataUrl = `data:image/png;base64,${readFileSync(
   resolve(__dirname, 'public/icons/carpincho-48.png'),
 ).toString('base64')}`
 
+// Scripts Chrome loads as classic files rather than modules, so none may carry an `import`.
+// Listing one as an extra input of the main build hoists whatever it shares with the popup and
+// the service worker into a chunk it cannot load, which is why every wire constant used to be
+// hand-copied into contentScript.ts. Each gets its own single-entry IIFE build instead, run
+// after the main one so the shared modules can just be imported.
+const STANDALONE_SCRIPTS = ['contentScript'] as const
+
+// Shared by the main build and the standalone ones below, so the two cannot drift: a script
+// built on its own has to resolve `@/` and see the same defines as the popup and the worker.
+const define = {
+  __APP_VERSION__: JSON.stringify(appVersion),
+  __WALLET_ICON_DATA_URL__: JSON.stringify(walletIconDataUrl),
+}
+const alias = { '@': resolve(__dirname, 'src') }
+
+const buildStandaloneScripts = (): Plugin => ({
+  name: 'carpincho-standalone-scripts',
+  apply: 'build',
+  async closeBundle() {
+    for (const name of STANDALONE_SCRIPTS) {
+      await build({
+        configFile: false,
+        define,
+        resolve: { alias },
+        build: {
+          outDir: 'dist-extension',
+          emptyOutDir: false,
+          // The main build already copied public/. Copying it again races the manifest rewrite,
+          // which runs alongside this one, and puts the unpatched version back.
+          copyPublicDir: false,
+          rollupOptions: {
+            input: resolve(__dirname, `src/extension/${name}.ts`),
+            output: {
+              format: 'iife',
+              entryFileNames: `${name}.js`,
+              inlineDynamicImports: true,
+            },
+          },
+        },
+      })
+    }
+  },
+})
+
 const injectManifestVersion = (): Plugin => ({
   name: 'carpincho-manifest-version',
   apply: 'build',
@@ -42,30 +86,24 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: isExtension ? './' : '/',
-    define: {
-      __APP_VERSION__: JSON.stringify(appVersion),
-      __WALLET_ICON_DATA_URL__: JSON.stringify(walletIconDataUrl),
-    },
-    plugins: [tailwindcss(), react(), ...(isExtension ? [injectManifestVersion()] : [])],
-    resolve: {
-      alias: {
-        '@': resolve(__dirname, 'src'),
-      },
-    },
+    define,
+    plugins: [
+      tailwindcss(),
+      react(),
+      ...(isExtension ? [buildStandaloneScripts(), injectManifestVersion()] : []),
+    ],
+    resolve: { alias },
     build: {
       outDir: isExtension ? 'dist-extension' : 'dist',
       rollupOptions: isExtension
         ? {
             input: {
               app: resolve(__dirname, 'index.html'),
-              contentScript: resolve(__dirname, 'src/extension/contentScript.ts'),
               background: resolve(__dirname, 'src/extension/background.ts'),
             },
             output: {
               entryFileNames: (chunk) =>
-                chunk.name === 'contentScript' || chunk.name === 'background'
-                  ? '[name].js'
-                  : 'assets/[name]-[hash].js',
+                chunk.name === 'background' ? '[name].js' : 'assets/[name]-[hash].js',
             },
           }
         : undefined,

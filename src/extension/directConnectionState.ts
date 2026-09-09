@@ -1,4 +1,9 @@
-import type { JsonRpcRequest, JsonRpcResponse } from '@/extension/messages'
+import {
+  isRecord,
+  type JsonRpcRequest,
+  type JsonRpcResponse,
+  responseResult,
+} from '@/extension/messages'
 import {
   CANTON_METHOD_CONNECT,
   CANTON_METHOD_DISCONNECT,
@@ -22,12 +27,8 @@ export const normalizeDirectConnectionOrigin = (value: string): string | undefin
 
 // Detects the CIP-0103 connect response shape that means the dApp is connected to this wallet.
 const isConnectedResult = (response: JsonRpcResponse): boolean => {
-  const result = response.result
-  return (
-    typeof result === 'object' &&
-    result !== null &&
-    (result as { isConnected?: unknown }).isConnected === true
-  )
+  const result = responseResult(response)
+  return isRecord(result) && result.isConnected === true
 }
 
 // Derives the direct-origin state update caused by a provider request/response pair.
@@ -40,7 +41,7 @@ export const directConnectionUpdateFromProviderResponse = ({
   request: JsonRpcRequest
   response: JsonRpcResponse
 }): DirectConnectionUpdate => {
-  if (response.error !== undefined) {
+  if ('error' in response) {
     return { action: 'none' }
   }
 

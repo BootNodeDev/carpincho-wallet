@@ -111,7 +111,11 @@ const tabsForOrigins = async (origins: string[]): Promise<Tab[]> =>
     ? []
     : ((await chromeApi?.tabs?.query({ url: origins.map((o) => `${o}/*`) }).catch(() => [])) ?? [])
 
-const sendToTab = async (tab: Tab, eventName: Cip103Event, payload: unknown): Promise<void> => {
+const sendToTab = async (
+  tab: Tab,
+  eventName: Cip103Event,
+  payload: RuntimeEventRelay['payload'],
+): Promise<void> => {
   if (tab.id === undefined) {
     return
   }

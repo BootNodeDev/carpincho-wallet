@@ -1,106 +1,27 @@
-const CARPINCHO_PROVIDER_ID = 'carpincho-wallet'
-const CARPINCHO_PROVIDER_NAME = 'Carpincho Wallet'
-const CARPINCHO_PROVIDER_DESCRIPTION = 'Connect with the Carpincho browser extension wallet'
-
-const WalletEvent = {
-  SPLICE_WALLET_REQUEST: 'SPLICE_WALLET_REQUEST',
-  SPLICE_WALLET_RESPONSE: 'SPLICE_WALLET_RESPONSE',
-  SPLICE_WALLET_EXT_READY: 'SPLICE_WALLET_EXT_READY',
-  SPLICE_WALLET_EXT_ACK: 'SPLICE_WALLET_EXT_ACK',
-  SPLICE_WALLET_EXT_OPEN: 'SPLICE_WALLET_EXT_OPEN',
-} as const
-
-const CANTON_REQUEST_PROVIDER_EVENT = 'canton:requestProvider'
-const CANTON_ANNOUNCE_PROVIDER_EVENT = 'canton:announceProvider'
-
-interface JsonRpcRequest {
-  jsonrpc: '2.0'
-  id?: string | number | null
-  method: string
-  params?: unknown
-}
-
-interface JsonRpcResponse {
-  jsonrpc: '2.0'
-  id?: string | number | null
-  result?: unknown
-  error?: {
-    code: number
-    message: string
-    data?: unknown
-  }
-}
-
-interface RuntimeProviderRequest {
-  type: 'CARPINCHO_PROVIDER_REQUEST'
-  request: JsonRpcRequest
-  origin: string
-}
-
-interface RuntimeOpenWallet {
-  type: 'CARPINCHO_OPEN_WALLET'
-  origin: string
-}
-
-interface SpliceWalletRequestMessage {
-  type: typeof WalletEvent.SPLICE_WALLET_REQUEST
-  request: JsonRpcRequest
-  target?: string
-}
-
-type SpliceWalletCallMessage = SpliceWalletRequestMessage & {
-  request: JsonRpcRequest & { id: string | number }
-}
-
-interface SpliceWalletResponseMessage {
-  type: typeof WalletEvent.SPLICE_WALLET_RESPONSE
-  response: JsonRpcResponse
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null
-
-const isForCarpincho = (message: { target?: unknown }): boolean =>
-  message.target === undefined || message.target === CARPINCHO_PROVIDER_ID
+import {
+  announcedProvider,
+  CANTON_ANNOUNCE_PROVIDER_EVENT,
+  CANTON_REQUEST_PROVIDER_EVENT,
+} from '@/extension/discovery'
+import {
+  CARPINCHO_PROVIDER_ID,
+  extensionAck,
+  isForCarpincho,
+  isRecord,
+  isSpliceWalletRequest,
+  type JsonRpcResponse,
+  jsonRpcError,
+  type RuntimeEventRelay,
+  type RuntimeOpenWallet,
+  type RuntimeProviderRequest,
+  type SpliceWalletRequestMessage,
+  type SpliceWalletResponseMessage,
+  WalletEvent,
+} from '@/extension/messages'
 
 // The bodiless page messages: only `type` and `target` matter on either.
 const isWalletMessage = (value: unknown, type: string): value is { target?: string } =>
   isRecord(value) && value.type === type
-
-const isSpliceWalletRequest = (value: unknown): value is SpliceWalletCallMessage =>
-  isRecord(value) &&
-  value.type === WalletEvent.SPLICE_WALLET_REQUEST &&
-  isRecord(value.request) &&
-  value.request.jsonrpc === '2.0' &&
-  typeof value.request.method === 'string' &&
-  // An id-less request is a notification: a wallet event on its way to the page, never a
-  // dApp call for this wallet to answer.
-  (typeof value.request.id === 'string' || typeof value.request.id === 'number')
-
-const extensionAck = (): {
-  type: typeof WalletEvent.SPLICE_WALLET_EXT_ACK
-  target: typeof CARPINCHO_PROVIDER_ID
-} => ({
-  type: WalletEvent.SPLICE_WALLET_EXT_ACK,
-  target: CARPINCHO_PROVIDER_ID,
-})
-
-const jsonRpcError = (
-  id: JsonRpcRequest['id'],
-  code: number,
-  message: string,
-  data?: unknown,
-): JsonRpcResponse => ({
-  jsonrpc: '2.0',
-  id,
-  error: data === undefined ? { code, message } : { code, message, data },
-})
-
-interface RuntimeEventRelay {
-  type: 'CARPINCHO_EVENT_RELAY'
-  eventName: string
-  payload: unknown
-}
 
 type RuntimeApi = {
   id: string
@@ -121,18 +42,7 @@ const announceProvider = (): void => {
     return
   }
   window.dispatchEvent(
-    new CustomEvent(CANTON_ANNOUNCE_PROVIDER_EVENT, {
-      detail: {
-        id: CARPINCHO_PROVIDER_ID,
-        name: CARPINCHO_PROVIDER_NAME,
-        // A base64 data URI built from icons/carpincho-48.png at build time: the SDK types
-        // this field as a data or https URL, and its picker renders in a blob: document that
-        // cannot load an extension URL.
-        icon: __WALLET_ICON_DATA_URL__,
-        description: CARPINCHO_PROVIDER_DESCRIPTION,
-        target: CARPINCHO_PROVIDER_ID,
-      },
-    }),
+    new CustomEvent(CANTON_ANNOUNCE_PROVIDER_EVENT, { detail: announcedProvider() }),
   )
 }
 
@@ -171,10 +81,7 @@ const postResponse = (response: JsonRpcResponse): void => {
 }
 
 const isRuntimeEventRelay = (value: unknown): value is RuntimeEventRelay =>
-  typeof value === 'object' &&
-  value !== null &&
-  (value as { type?: unknown }).type === 'CARPINCHO_EVENT_RELAY' &&
-  typeof (value as { eventName?: unknown }).eventName === 'string'
+  isRecord(value) && value.type === 'CARPINCHO_EVENT_RELAY' && typeof value.eventName === 'string'
 
 const forwardEventToPage = (message: RuntimeEventRelay): void => {
   // The dapp-sdk reads wallet events as id-less SPLICE_WALLET_REQUEST notifications; the

@@ -21,6 +21,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@canton-network/core-types": "^1.11.0",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource-variable/manrope": "^5.2.8",
     "@noble/ed25519": "^3.1.0",

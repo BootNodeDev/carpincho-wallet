@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
 
 import { createDirectProviderResponse } from '@/extension/directProvider'
+import { responseError, responseResult } from '@/extension/messages'
 import type { AccountPublic } from '@/vault/types'
 
 const originalFetch = globalThis.fetch
@@ -41,8 +42,9 @@ describe('extension direct provider handling', () => {
       { isConnected: true },
     )
 
-    assert.equal(response?.id, 'connect-1')
-    const result = response?.result as { isConnected?: boolean }
+    assert.ok(response)
+    assert.equal(response.id, 'connect-1')
+    const result = responseResult(response) as { isConnected?: boolean }
     assert.equal(result.isConnected, true)
   })
 
@@ -63,7 +65,8 @@ describe('extension direct provider handling', () => {
       { isConnected: false },
     )
 
-    assert.deepEqual(response?.result, [])
+    assert.ok(response)
+    assert.deepEqual(responseResult(response), [])
   })
 
   it('returns accounts via listAccounts for a connected origin', async () => {
@@ -73,7 +76,8 @@ describe('extension direct provider handling', () => {
       { isConnected: true },
     )
 
-    assert.equal((response?.result as unknown[]).length, 1)
+    assert.ok(response)
+    assert.equal((responseResult(response) as unknown[]).length, 1)
   })
 
   it('refuses signing from an unapproved origin instead of queuing a prompt', async () => {
@@ -88,8 +92,10 @@ describe('extension direct provider handling', () => {
       { isConnected: false },
     )
 
-    assert.equal(response?.error?.code, -32000)
-    assert.match(response?.error?.message ?? '', /not connected/i)
+    assert.ok(response)
+    const error = responseError(response)
+    assert.equal(error?.code, -32000)
+    assert.match(error?.message ?? '', /not connected/i)
   })
 
   it('queues signing for user approval once the origin is connected', async () => {

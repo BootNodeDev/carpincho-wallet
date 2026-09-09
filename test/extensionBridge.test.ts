@@ -29,10 +29,7 @@ describe('extension postMessage bridge', () => {
     assert.deepEqual(manifest.content_scripts?.[0]?.js, ['contentScript.js'])
     assert.equal(manifest.content_scripts?.[0]?.run_at, 'document_start')
     assert.ok(manifest.content_scripts?.[0]?.matches?.includes('<all_urls>'))
-    assert.match(
-      viteConfig,
-      /contentScript: resolve\(__dirname, 'src\/extension\/contentScript\.ts'\)/,
-    )
+    assert.match(viteConfig, /STANDALONE_SCRIPTS = \[[^\]]*'contentScript'/)
     assert.match(viteConfig, /background: resolve\(__dirname, 'src\/extension\/background\.ts'\)/)
   })
 
