@@ -76,8 +76,8 @@ describe('MenuSheet', () => {
     )
     assert.ok(screen.getByRole('button', { name: /walletconnect/i }))
     assert.ok(screen.getByRole('button', { name: /^theme$/i }))
-    assert.ok(screen.getByRole('button', { name: /^vault$/i }))
-    assert.ok(screen.getByRole('button', { name: /^lock$/i }))
+    assert.ok(screen.getByRole('button', { name: /^vault management$/i }))
+    assert.ok(screen.getByRole('button', { name: /^lock wallet$/i }))
   })
 
   it('renders nothing when closed', () => {
@@ -90,7 +90,7 @@ describe('MenuSheet', () => {
         />,
       ),
     )
-    assert.equal(screen.queryByRole('button', { name: /^vault$/i }), null)
+    assert.equal(screen.queryByRole('button', { name: /^vault management$/i }), null)
   })
 
   it('drills into Vault and shows its four entries', async () => {
@@ -104,7 +104,7 @@ describe('MenuSheet', () => {
         />,
       ),
     )
-    await user.click(screen.getByRole('button', { name: /^vault$/i }))
+    await user.click(screen.getByRole('button', { name: /^vault management$/i }))
     assert.ok(screen.getByRole('button', { name: /^password$/i }))
     assert.ok(screen.getByRole('button', { name: /^auto lock$/i }))
     assert.ok(screen.getByRole('button', { name: /^export vault$/i }))
@@ -137,7 +137,7 @@ describe('MenuSheet', () => {
         />,
       ),
     )
-    await user.click(screen.getByRole('button', { name: /^vault$/i }))
+    await user.click(screen.getByRole('button', { name: /^vault management$/i }))
     await user.click(screen.getByRole('button', { name: /^password$/i }))
     assert.ok(screen.getByLabelText(/current password/i))
     await user.click(screen.getByRole('button', { name: /back/i }))
@@ -155,7 +155,7 @@ describe('MenuSheet', () => {
         />,
       ),
     )
-    await user.click(screen.getByRole('button', { name: /^vault$/i }))
+    await user.click(screen.getByRole('button', { name: /^vault management$/i }))
     await user.click(screen.getByRole('button', { name: /^import vault$/i }))
     assert.ok(screen.getByLabelText(/backup file/i))
     assert.ok(screen.getByLabelText(/backup password/i))
@@ -178,7 +178,7 @@ describe('MenuSheet', () => {
         />,
       ),
     )
-    await user.click(screen.getByRole('button', { name: /^lock$/i }))
+    await user.click(screen.getByRole('button', { name: /^lock wallet$/i }))
     assert.equal(lockCalls, 1)
     assert.deepEqual(openChanges, [false])
   })
@@ -206,11 +206,11 @@ describe('MenuSheet', () => {
       )
     }
     render(<Harness />)
-    await user.click(screen.getByRole('button', { name: /^vault$/i }))
+    await user.click(screen.getByRole('button', { name: /^vault management$/i }))
     assert.ok(screen.getByRole('button', { name: /^password$/i }))
     await user.keyboard('{Escape}')
     await user.click(screen.getByRole('button', { name: /reopen/i }))
-    assert.ok(screen.getByRole('button', { name: /^vault$/i }))
+    assert.ok(screen.getByRole('button', { name: /^vault management$/i }))
   })
 
   it('shows the WalletConnect entry in web mode and drills into its pairing screen', async () => {

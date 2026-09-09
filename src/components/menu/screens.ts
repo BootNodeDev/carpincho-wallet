@@ -84,10 +84,10 @@ export const MENU_LISTS: Partial<Record<Screen, MenuListRow[]>> = {
     // off it, since only the injected provider fills it.
     { label: 'WalletConnect', to: 'wallet-connect', icon: WALLET_CONNECT_ICON, runtime: 'web' },
     { label: 'Theme', to: 'theme' },
-    { label: 'Vault', to: 'vault' },
+    { label: 'Vault Management', to: 'vault' },
     { label: 'Connected dApps', to: 'connected-dapps', runtime: 'extension' },
     // 'Lock', not 'Log out': the vault locks and every dApp session survives to the next unlock.
-    { label: 'Lock', to: 'lock' },
+    { label: 'Lock Wallet', to: 'lock' },
   ],
   vault: [
     { label: 'Password', to: 'password' },
