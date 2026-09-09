@@ -71,7 +71,7 @@ export const HomeTabs = ({
         >
           <span>Activity</span>
           {pendingTransferCount > 0 ? (
-            <span className="ml-1 inline-grid min-w-5 place-items-center rounded-full bg-accent px-1.5 text-[0.72rem] leading-5 text-primary-foreground">
+            <span className="ml-1 inline-grid min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[0.72rem] leading-5 text-primary-foreground">
               {pendingTransferCount}
             </span>
           ) : null}

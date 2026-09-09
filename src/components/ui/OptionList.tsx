@@ -26,7 +26,7 @@ export const OptionList = <T extends string>({
             className={cn(
               MENU_ROW_BASE_CLASS,
               'flex items-center justify-between text-left text-foreground',
-              active && 'border-primary text-primary',
+              active && 'border-primary text-primary-text',
             )}
           >
             <span className="font-medium">{opt.label}</span>

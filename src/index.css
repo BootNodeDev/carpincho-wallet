@@ -15,17 +15,21 @@
   --color-muted: #ececf0;
 
   --color-border: #e2e2ea;
-  --color-border-strong: #ccccd6;
+  --color-border-strong: #8a8b9c;
 
   --color-foreground: #2c2d40;
   --color-muted-foreground: #4b4d60;
-  --color-soft: #6b6d80;
+  --color-soft: #5f6175;
 
   --color-primary: #692581;
   --color-primary-hover: #8b46a4;
   --color-primary-soft: #f3e8f8;
   --color-primary-ink: #4a1a5c;
   --color-primary-foreground: #ffffff;
+  /* Primary as text or an icon. Split from --color-primary because that one also
+     fills the primary button, and in dark no single purple can both carry a white
+     label (needs to stay dark) and read at 4.5:1 on the surface (needs to be light). */
+  --color-primary-text: #692581;
 
   --logo-shadow-color: rgba(44, 45, 64, 0.5);
 
@@ -40,7 +44,7 @@
   --color-warning: #8a6400;
   --color-warning-soft: #f6ecd2;
 
-  --color-form-placeholder: #6f7185;
+  --color-form-placeholder: #666879;
 
   --color-scrim: rgba(20, 21, 43, 0.42);
 
@@ -69,17 +73,18 @@
   --color-muted: #232539;
 
   --color-border: #2c2e46;
-  --color-border-strong: #5f6178;
+  --color-border-strong: #6b6d84;
 
   --color-foreground: #fafbfc;
   --color-muted-foreground: #c5c2cb;
   --color-soft: #e2e0e7;
 
   --color-primary: #9d54b8;
-  --color-primary-hover: #b06cc9;
+  --color-primary-hover: #c58ada;
   --color-primary-soft: #2a1f3a;
   --color-primary-ink: #ecd9f5;
   --color-primary-foreground: #ffffff;
+  --color-primary-text: #b87ad2;
 
   --logo-shadow-color: rgba(0, 0, 0, 0.6);
 
@@ -94,7 +99,7 @@
   --color-warning: #d4a85a;
   --color-warning-soft: #332a16;
 
-  --color-form-placeholder: #7a7c92;
+  --color-form-placeholder: #8d8fa4;
 
   --color-scrim: rgba(8, 8, 18, 0.65);
 
@@ -129,6 +134,7 @@
   --color-primary-soft: var(--color-primary-soft);
   --color-primary-ink: var(--color-primary-ink);
   --color-primary-foreground: var(--color-primary-foreground);
+  --color-primary-text: var(--color-primary-text);
   --color-accent: var(--color-accent);
   --color-success: var(--color-success);
   --color-success-soft: var(--color-success-soft);
@@ -351,9 +357,26 @@
     display: none;
   }
 
-  .animate-drift,
-  .animate-logo-shadow {
-    animation: none;
+  /*
+   * Everything that moves is cut to a single instant pass, so entry animations still
+   * land on their final frame (Radix reads animationend to unmount a closing sheet)
+   * and nothing loops. These rules sit outside any @layer, which is what lets them
+   * beat the Tailwind animate-* utilities without !important. The spinners are
+   * exempt: they report progress, not decoration.
+   */
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0ms;
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+    transition-duration: 1ms;
+  }
+
+  .animate-spin,
+  .animate-spin-fast {
+    animation-duration: 900ms;
+    animation-iteration-count: infinite;
   }
 }
 

@@ -7,7 +7,7 @@ const FAIR: Tier = { segmentColor: 'bg-warning', labelColor: 'text-warning', lab
 const STRONG: Tier = { segmentColor: 'bg-success', labelColor: 'text-success', label: 'Strong' }
 const EXCELLENT: Tier = {
   segmentColor: 'bg-primary',
-  labelColor: 'text-primary',
+  labelColor: 'text-primary-text',
   label: 'Excellent',
 }
 

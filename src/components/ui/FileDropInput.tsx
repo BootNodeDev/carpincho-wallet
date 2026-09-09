@@ -26,12 +26,14 @@ export const FileDropInput = ({
       type="file"
       accept={accept}
       aria-label={ariaLabel}
-      className="sr-only"
+      className="peer sr-only"
       onChange={(event) => onSelect(event.currentTarget.files?.[0] ?? null)}
     />
+    {/* The input is visually hidden but still tabbable, so the dropzone has to show
+        its focus ring, or a keyboard user lands on nothing they can see. */}
     <label
       htmlFor={id}
-      className="cursor-pointer rounded-md border border-dashed border-border bg-surface px-4 py-6 text-center hover:border-primary/60"
+      className="cursor-pointer rounded-md border border-dashed border-border bg-surface px-4 py-6 text-center hover:border-primary/60 peer-focus-visible:border-primary peer-focus-visible:shadow-focus"
     >
       {fileName === null ? (
         <span className="text-[0.82rem] font-medium text-muted-foreground">{prompt}</span>

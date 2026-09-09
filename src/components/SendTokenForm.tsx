@@ -106,7 +106,7 @@ export const SendTokenForm = ({
             data-testid="send-contacts"
             aria-label="Contacts"
             onClick={onOpenContacts}
-            className="inline-flex items-center justify-center rounded-sm text-primary transition-colors hover:text-primary-hover focus-visible:outline-none focus-visible:shadow-focus"
+            className="inline-flex items-center justify-center rounded-sm text-primary-text transition-colors hover:text-primary-hover focus-visible:outline-none focus-visible:shadow-focus"
           >
             {CONTACTS_ICON}
           </button>

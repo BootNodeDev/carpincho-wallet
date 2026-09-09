@@ -10,7 +10,7 @@ interface WelcomeHeroProps {
 }
 
 const WORDMARK_BASE =
-  'font-display font-semibold text-primary dark:bg-[image:var(--bg-gradient-brand)] dark:bg-clip-text dark:text-transparent leading-[1.02] tracking-[-0.03em] lowercase'
+  'font-display font-semibold text-primary-text dark:bg-[image:var(--bg-gradient-brand)] dark:bg-clip-text dark:text-transparent leading-[1.02] tracking-[-0.03em] lowercase'
 
 const DEFAULT_LOGO_SIZE: Record<WelcomeHeroLayout, number> = {
   stacked: 132,

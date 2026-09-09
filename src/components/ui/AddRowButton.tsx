@@ -10,7 +10,7 @@ export const AddRowButton = ({ label, onClick, testId }: AddRowButtonProps): JSX
     type="button"
     data-testid={testId}
     onClick={onClick}
-    className="mt-1 flex w-full items-center justify-center gap-2 rounded-sm border border-dashed border-border p-2 font-semibold text-primary transition-colors hover:border-primary/40 hover:bg-primary-soft"
+    className="mt-1 flex w-full items-center justify-center gap-2 rounded-sm border border-dashed border-border p-2 font-semibold text-primary-text transition-colors hover:border-primary/40 hover:bg-primary-soft"
   >
     <span aria-hidden="true">+</span> {label}
   </button>
