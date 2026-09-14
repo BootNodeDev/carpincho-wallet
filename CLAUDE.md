@@ -49,6 +49,9 @@ Every interactive or assertion-worthy element ships a stable `data-testid` so en
 - Build outputs: `dist/` for the web build and `dist-extension/` for the Chrome extension (`pnpm run build:extension`)
 - Dev server: `http://localhost:3011`
 - The extension/manifest version comes from this repo's `package.json` (single source of truth), injected at build time via the `__APP_VERSION__` Vite define and a manifest-rewrite plugin; never hardcode versions in `manifest.json` or source
+- The dApp wire format is typed by `@canton-network/core-types`. `src/extension/messages.ts` derives the page-facing frames from its `SpliceMessage` schema and pins the event names to its `WalletEvent` enum with `satisfies`; never hand-declare a message type the SDK already publishes. Import the SDK's *types* only — a runtime import drags zod into the content script, which loads on every page
+- Chrome loads the content script (`contentScript.ts`) as a classic file, so it may not contain an `import` after bundling. `STANDALONE_SCRIPTS` in `vite.config.ts` builds each such script on its own as a single-entry IIFE, which is what lets it import shared modules. A new content script goes in that list and in `knip.json`'s entries, not in the main build's `rollupOptions.input`
+- The wallet sets no `window.canton` and declares no `world: "MAIN"` content script. That global is the dApp SDK's fast `detect()` path, and it was removed on purpose: it re-exposes wallet-installed to any script enumerating `window`, which is what dropping the load-time announce was for, and it only shortens the case that is already fast (an absent wallet sets no global and still costs the SDK's 2 s timeout). See `architecture.md`; `test/extensionManifest.test.ts` enforces it
 - `bin/` holds the gitleaks binary and is gitignored. Never commit it; `scripts/install-gitleaks.sh` puts it there on demand
 
 ## Git hooks
@@ -82,6 +85,7 @@ Accounts are scoped to the parties that endpoint hosts. A Canton party can only 
 - **DOM environment:** `@happy-dom/global-registrator` bootstrapped in [`test/setup-dom.ts`](test/setup-dom.ts) for React Testing Library interaction tests
 - **Test config:** [`test/tsconfig.json`](test/tsconfig.json) sets `jsx: react-jsx`; `TSX_TSCONFIG_PATH` in the test script points tsx at it
 - **Run tests:** `pnpm test`
+- **Types in tests are gated too:** `pnpm run typecheck` runs `tsc -b` over the app and node projects, then `tsc -p test/tsconfig.json` over the tests. It is a second `tsc` call rather than a project reference because `tsc -b` would need `composite: true`, which cannot be combined with `noEmit`. `tsx` erases types without checking them, so without this step a test could hold a type error and still pass; keep test stubs compiling rather than widening a cast to silence one
 - **What to test:** Business logic, API integrations, component behavior
 - **What not to test:** Styling, third-party library internals, trivial getters/setters
 - **Coverage:** Aim for meaningful coverage, not a number. Cover the paths that matter.
@@ -154,3 +158,4 @@ The `/sdlc:create-issue` skill applies these labels automatically when creating 
 - [CIP-0103 dApp API spec](https://github.com/canton-foundation/cips/blob/main/cip-0103/cip-0103.md) — every field on the account object `listAccounts` returns is required, `networkId` included; the network object on the status payload is optional
 - [wallet-service](https://github.com/BootNodeDev/canton-wallet-service) — the JSON-RPC endpoint this wallet forwards to
 - [Reown (WalletConnect cloud)](https://cloud.reown.com)
+- [Canton wallet SDK](https://github.com/canton-network/wallet) — home of `@canton-network/core-types` (the `SpliceMessage` wire schema) and `@canton-network/dapp-sdk` (the `ExtensionAdapter` a dApp detects this wallet with)

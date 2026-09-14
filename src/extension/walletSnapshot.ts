@@ -1,3 +1,4 @@
+import { isRecord } from '@/extension/messages'
 import type { AccountPublic } from '@/vault/types'
 
 const WALLET_SNAPSHOT_KEY = 'carpincho.wallet.snapshot'
@@ -26,24 +27,21 @@ export interface ExtensionWalletSnapshot {
 }
 
 const isAccountPublic = (value: unknown): value is AccountPublic =>
-  typeof value === 'object' &&
-  value !== null &&
-  typeof (value as AccountPublic).id === 'string' &&
-  typeof (value as AccountPublic).name === 'string' &&
-  typeof (value as AccountPublic).partyId === 'string' &&
-  typeof (value as AccountPublic).publicKeyBase64 === 'string' &&
-  typeof (value as AccountPublic).network === 'string' &&
-  typeof (value as AccountPublic).isPrimary === 'boolean' &&
-  typeof (value as AccountPublic).createdAt === 'number'
+  isRecord(value) &&
+  typeof value.id === 'string' &&
+  typeof value.name === 'string' &&
+  typeof value.partyId === 'string' &&
+  typeof value.publicKeyBase64 === 'string' &&
+  typeof value.network === 'string' &&
+  typeof value.isPrimary === 'boolean' &&
+  typeof value.createdAt === 'number'
 
 const isWalletSnapshot = (value: unknown): value is ExtensionWalletSnapshot =>
-  typeof value === 'object' &&
-  value !== null &&
-  Array.isArray((value as ExtensionWalletSnapshot).accounts) &&
-  (value as ExtensionWalletSnapshot).accounts.every(isAccountPublic) &&
-  ((value as ExtensionWalletSnapshot).primary === null ||
-    isAccountPublic((value as ExtensionWalletSnapshot).primary)) &&
-  typeof (value as ExtensionWalletSnapshot).updatedAt === 'number'
+  isRecord(value) &&
+  Array.isArray(value.accounts) &&
+  value.accounts.every(isAccountPublic) &&
+  (value.primary === null || isAccountPublic(value.primary)) &&
+  typeof value.updatedAt === 'number'
 
 export const persistWalletSnapshot = async (
   snapshot: Omit<ExtensionWalletSnapshot, 'updatedAt'> | null,

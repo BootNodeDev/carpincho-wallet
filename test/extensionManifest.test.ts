@@ -50,11 +50,48 @@ describe('extension packaging', () => {
     assert.match(viteConfig, /outDir: isExtension \? 'dist-extension' : 'dist'/)
   })
 
-  it('emits a classic content script without module imports', () => {
-    const contentScript = readText('dist-extension/contentScript.js')
+  it('emits every declared content script as a classic file without module imports', () => {
+    // Chrome loads a content script as a plain file, so it may not carry an `import`. Each one
+    // shares its wire constants with the popup and the service worker, so each is built on its
+    // own: as an input of the main build, the shared modules land in a chunk it cannot load.
+    // Read from the manifest rather than a hardcoded filename, because the manifest is what
+    // decides which files Chrome loads this way — a second one cannot slip in unchecked.
+    const manifest = readJson<{ content_scripts?: Array<{ js?: string[] }> }>(
+      'public/manifest.json',
+    )
+    const declared = manifest.content_scripts?.flatMap((entry) => entry.js ?? []) ?? []
 
-    assert.doesNotMatch(contentScript, /\bimport\s*[{*\w]/)
-    assert.doesNotMatch(contentScript, /\bfrom\s*["'][^"']+["']/)
+    assert.ok(declared.length > 0)
+    for (const file of declared) {
+      const script = readText(`dist-extension/${file}`)
+
+      assert.doesNotMatch(script, /\bimport\s*[{*\w]/)
+      assert.doesNotMatch(script, /\bfrom\s*["'][^"']+["']/)
+    }
+  })
+
+  it('sets no page-world global, so a passing script cannot tell the wallet is installed', () => {
+    // Scenario: a MAIN-world script setting `window.canton` would let the SDK's
+    // ExtensionAdapter.detect() skip the SPLICE_WALLET_EXT_READY round trip. It is not worth
+    // it. The global hands every site the same fact the load-time announce used to, this time
+    // to any script that merely enumerates `window`, and it only shortens the case that is
+    // already fast: an uninstalled wallet sets no global, so a real absence still costs the
+    // SDK's full 2 s detect timeout. Discovery answers `canton:requestProvider` instead.
+    const manifest = readJson<{
+      content_scripts?: Array<{ js?: string[]; world?: string }>
+    }>('public/manifest.json')
+
+    // One isolated-world bridge, and nothing else: a page-world entry is how the global would
+    // come back, so the count is part of the guard, not incidental.
+    assert.deepEqual(
+      manifest.content_scripts?.map((entry) => entry.js),
+      [['contentScript.js']],
+    )
+    assert.equal(
+      manifest.content_scripts?.some((entry) => entry.world === 'MAIN'),
+      false,
+    )
+    assert.equal(existsSync('dist-extension/cantonGlobal.js'), false)
   })
 
   it('builds the announced wallet icon define from the shipped PNG', () => {

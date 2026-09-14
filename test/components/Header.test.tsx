@@ -14,7 +14,12 @@ const baseVault = (overrides: Partial<VaultContextValue> = {}): VaultContextValu
   setup: async () => undefined,
   unlock: async () => undefined,
   lock: () => undefined,
-  destroyVault: () => undefined,
+  destroyVault: async () => undefined,
+  hostedElsewhereCount: 0,
+  exportEncryptedVault: async () =>
+    ({}) as Awaited<ReturnType<VaultContextValue['exportEncryptedVault']>>,
+  importEncryptedVault: async () =>
+    ({}) as Awaited<ReturnType<VaultContextValue['importEncryptedVault']>>,
   accounts: [],
   primary: null,
   transactions: [],

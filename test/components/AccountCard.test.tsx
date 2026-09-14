@@ -34,7 +34,12 @@ const baseVault = (): VaultContextValue =>
     setup: async () => undefined,
     unlock: async () => undefined,
     lock: () => undefined,
-    destroyVault: () => undefined,
+    destroyVault: async () => undefined,
+    hostedElsewhereCount: 0,
+    exportEncryptedVault: async () =>
+      ({}) as Awaited<ReturnType<VaultContextValue['exportEncryptedVault']>>,
+    importEncryptedVault: async () =>
+      ({}) as Awaited<ReturnType<VaultContextValue['importEncryptedVault']>>,
     accounts: [PRIMARY_ACCOUNT, SECONDARY_ACCOUNT],
     primary: PRIMARY_ACCOUNT,
     transactions: [],

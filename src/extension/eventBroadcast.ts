@@ -15,7 +15,7 @@ const runtime = (globalThis as { chrome?: { runtime?: RuntimeApi } }).chrome?.ru
 // this pushes is one every dApp was told to expect, whichever transport it arrived on.
 export const broadcastWalletEvent = async (
   eventName: Cip103Event,
-  payload: unknown,
+  payload: RuntimeBroadcastEvent['payload'],
 ): Promise<void> => {
   if (runtime === undefined) {
     return

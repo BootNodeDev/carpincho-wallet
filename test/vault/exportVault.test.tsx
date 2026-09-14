@@ -34,13 +34,14 @@ describe('VaultContext.exportEncryptedVault', () => {
       })
     })
 
-    let backup: CarpinchoBackup | null = null
+    // Declared without an initializer on purpose: the assignment happens inside the `act`
+    // callback, which control-flow analysis cannot see, so an `= null` start would narrow the
+    // variable to `null` for the rest of the test.
+    let backup: CarpinchoBackup | undefined
     await act(async () => {
-      backup = (await ref.current?.exportEncryptedVault('correct-horse-battery')) ?? null
+      backup = await ref.current?.exportEncryptedVault('correct-horse-battery')
     })
-    if (backup === null) {
-      throw new Error('no backup produced')
-    }
+    assert.ok(backup, 'no backup produced')
     assert.equal(backup.kind, 'carpincho-backup')
     assert.equal(backup.version, 1)
 

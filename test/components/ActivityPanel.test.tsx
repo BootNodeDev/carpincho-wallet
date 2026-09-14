@@ -28,7 +28,12 @@ const baseVault = (): VaultContextValue =>
     setup: async () => undefined,
     unlock: async () => undefined,
     lock: () => undefined,
-    destroyVault: () => undefined,
+    destroyVault: async () => undefined,
+    hostedElsewhereCount: 0,
+    exportEncryptedVault: async () =>
+      ({}) as Awaited<ReturnType<VaultContextValue['exportEncryptedVault']>>,
+    importEncryptedVault: async () =>
+      ({}) as Awaited<ReturnType<VaultContextValue['importEncryptedVault']>>,
     accounts: [ACCOUNT],
     primary: ACCOUNT,
     transactions: [],
@@ -251,6 +256,7 @@ describe('ActivityPanel', () => {
     // Scenario: first fetch in flight, no history — show a loading indicator, not the empty state.
     const api: Cip56TransferApi = {
       listPendingIncomingTransfers: () => new Promise(() => {}),
+      acceptTransfer: async () => ({ updateId: 'update-1' }),
     }
 
     renderPanel(api)
@@ -320,6 +326,7 @@ describe('ActivityPanel', () => {
     // Scenario: confirmed transactions still render via ActivityList beneath any pending items.
     const api: Cip56TransferApi = {
       listPendingIncomingTransfers: async () => [],
+      acceptTransfer: async () => ({ updateId: 'update-1' }),
     }
 
     renderPanel(api, [txRecord('tx-1', 'Send 25 AMT')])

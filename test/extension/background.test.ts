@@ -1,7 +1,12 @@
 import { strict as assert } from 'node:assert'
 import { after, before, describe, it } from 'node:test'
 import { DIRECT_CONNECTED_ORIGINS_KEY } from '@/extension/directConnections'
-import type { JsonRpcResponse, RuntimeEventRelay } from '@/extension/messages'
+import {
+  type JsonRpcResponse,
+  type RuntimeEventRelay,
+  responseError,
+  responseResult,
+} from '@/extension/messages'
 
 const originalChrome = (globalThis as { chrome?: unknown }).chrome
 
@@ -294,7 +299,7 @@ describe('background: opening the wallet for a queued request', () => {
 
     for (const answers of [first, second]) {
       assert.equal(answers.length, 1)
-      assert.deepEqual(answers[0].error, { code: 4001, message: 'user rejected' })
+      assert.deepEqual(responseError(answers[0]), { code: 4001, message: 'user rejected' })
     }
   })
 })
@@ -324,7 +329,7 @@ describe('background: answering the last request', () => {
 
     assert.equal(createdWindows.length, 1)
     assert.deepEqual(removedWindows, [APPROVAL_WINDOW_ID])
-    assert.deepEqual(answers[0].result, { isConnected: true })
+    assert.deepEqual(responseResult(answers[0]), { isConnected: true })
   })
 })
 
@@ -381,7 +386,7 @@ describe('background: CARPINCHO_OPEN_WALLET', () => {
     // reason to take it away, and it was never opened for that request.
     assert.equal(createdWindows.length, 1)
     assert.deepEqual(removedWindows, [])
-    assert.deepEqual(answers[0].result, { isConnected: true })
+    assert.deepEqual(responseResult(answers[0]), { isConnected: true })
 
     // Leave the window closed for the next group
     assert.ok(windowRemoved)
@@ -488,6 +493,6 @@ describe('background: requests landing while the window is still opening', () =>
 
     assert.equal(createdWindows.length, 1)
     assert.deepEqual(removedWindows, [APPROVAL_WINDOW_ID])
-    assert.deepEqual(answers[0].result, { isConnected: true })
+    assert.deepEqual(responseResult(answers[0]), { isConnected: true })
   })
 })

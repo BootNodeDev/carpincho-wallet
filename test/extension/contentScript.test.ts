@@ -7,11 +7,16 @@ type Listener = (message: unknown) => void
 const originalChrome = (globalThis as { chrome?: unknown }).chrome
 
 const runtimeMessages: unknown[] = []
+const announcesAtLoad: unknown[] = []
 let relayListener: Listener | undefined
 
 // contentScript.ts reads `chrome` and wires its listeners at import time, so the stub
 // must be in place before the module loads.
 before(async () => {
+  const recordAnnounce = (event: Event): void => {
+    announcesAtLoad.push((event as CustomEvent).detail)
+  }
+  window.addEventListener('canton:announceProvider', recordAnnounce)
   Object.defineProperty(globalThis, 'chrome', {
     configurable: true,
     value: {
@@ -30,6 +35,8 @@ before(async () => {
     },
   })
   await import('@/extension/contentScript')
+  await new Promise((resolve) => setTimeout(resolve, 25))
+  window.removeEventListener('canton:announceProvider', recordAnnounce)
 })
 
 after(() => {
@@ -67,6 +74,14 @@ const announcedProvider = (): Record<string, unknown> => {
 }
 
 describe('contentScript provider announcement', () => {
+  it('stays quiet until a dApp asks', () => {
+    // Scenario: the content script matches <all_urls>, so announcing at load tells every site
+    // the user visits that the wallet is installed. The recorder runs from before the module is
+    // imported until just after, above. Discovery still works: the SDK's
+    // requestAnnouncedProviders() dispatches the request the next test replays.
+    assert.deepEqual(announcesAtLoad, [])
+  })
+
   it('announces the shipped PNG as an inline data URI, not a chrome-extension URL', () => {
     // Scenario: the dApp SDK picker renders in a blob: document and types the announced icon
     // as a data or https URL, so a chrome-extension:// URL would render a broken image. The
