@@ -82,7 +82,9 @@ export const ConnectionFooter = ({
                   title="Disconnect"
                   className={cn(
                     PLAIN_ICON_BUTTON_CLASS,
-                    'ml-0.5 size-[18px] text-soft hover:bg-danger/10 hover:text-danger [&>svg]:size-[13px]',
+                    // size-6 is the 24px WCAG 2.5.8 floor; the glyph stays small so the
+                    // footer row does not grow around it.
+                    '-my-1 ml-0.5 size-6 text-soft hover:bg-danger/10 hover:text-danger [&>svg]:size-[13px]',
                   )}
                 >
                   {DISCONNECT_ICON}

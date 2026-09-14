@@ -64,7 +64,7 @@ export const Select = ({
               className={ITEM_CLASS}
             >
               <RadixSelect.ItemText>{option.label}</RadixSelect.ItemText>
-              <RadixSelect.ItemIndicator className="text-primary">
+              <RadixSelect.ItemIndicator className="text-primary-text">
                 {CHECK_ICON}
               </RadixSelect.ItemIndicator>
             </RadixSelect.Item>

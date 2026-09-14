@@ -13,7 +13,7 @@ const stateOf = (index: number, current: number): StepState =>
 
 const NODE_CLASS: Record<StepState, string> = {
   complete: 'bg-primary border-primary text-primary-foreground',
-  active: 'border-primary text-primary bg-primary-soft',
+  active: 'border-primary text-primary-text bg-primary-soft',
   upcoming: 'border-border text-muted-foreground bg-surface',
 }
 

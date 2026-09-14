@@ -35,7 +35,7 @@ export const UnlockView = (): JSX.Element => {
   }
 
   return (
-    <div>
+    <main>
       <WelcomeHero
         logoSize={112}
         description="Enter your vault password to continue."
@@ -99,6 +99,6 @@ export const UnlockView = (): JSX.Element => {
           onConfirm={() => v.destroyVault()}
         />
       </Sheet>
-    </div>
+    </main>
   )
 }

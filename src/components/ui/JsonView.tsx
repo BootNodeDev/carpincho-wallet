@@ -1,6 +1,11 @@
-import { JsonView as RjvJsonView } from '@uiw/react-json-view'
-import type { CSSProperties } from 'react'
+import { type CSSProperties, lazy, Suspense } from 'react'
 import { cn } from '@/utils/cn'
+
+// The json tree is the heaviest thing the popup imports and only ever renders inside a
+// sheet the user opened, so it loads on demand instead of on every popup open.
+const RjvJsonView = lazy(async () => ({
+  default: (await import('@uiw/react-json-view')).JsonView,
+}))
 
 // Map the json tree's CSS variables onto the wallet's existing token palette.
 const THEME_STYLE: CSSProperties = {
@@ -40,14 +45,16 @@ export const JsonView = ({ value, className }: JsonViewProps): JSX.Element => {
       )}
     >
       {isObject ? (
-        <RjvJsonView
-          value={value as object}
-          style={THEME_STYLE}
-          displayDataTypes={false}
-          displayObjectSize={false}
-          enableClipboard
-          collapsed={2}
-        />
+        <Suspense fallback={<pre className="m-0 font-mono text-muted-foreground">Loading...</pre>}>
+          <RjvJsonView
+            value={value as object}
+            style={THEME_STYLE}
+            displayDataTypes={false}
+            displayObjectSize={false}
+            enableClipboard
+            collapsed={2}
+          />
+        </Suspense>
       ) : (
         <pre className="m-0 whitespace-pre-wrap break-words font-mono text-foreground">
           {value == null ? '' : String(value)}

@@ -49,7 +49,7 @@ export const AmountField = ({
         type="button"
         data-testid={testId === undefined ? undefined : `${testId}-max`}
         onClick={onMax}
-        className="shrink-0 rounded-sm px-2 py-1 text-[0.72rem] font-bold uppercase tracking-wide text-primary transition-colors hover:bg-primary-soft focus-visible:outline-none focus-visible:shadow-focus"
+        className="shrink-0 rounded-sm px-2 py-1 text-[0.72rem] font-bold uppercase tracking-wide text-primary-text transition-colors hover:bg-primary-soft focus-visible:outline-none focus-visible:shadow-focus"
       >
         Max
       </button>

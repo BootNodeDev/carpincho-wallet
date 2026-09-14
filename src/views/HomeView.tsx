@@ -140,7 +140,7 @@ export const HomeView = (): JSX.Element => {
   const connectedOrigin = dapp.kind === 'connected' ? dapp.origin : ''
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <main className="flex min-h-0 flex-1 flex-col">
       <div className="shrink-0 pb-3">
         <AccountCard primary={primary} />
       </div>
@@ -213,6 +213,6 @@ export const HomeView = (): JSX.Element => {
         }
         onOpenSettings={() => setSettingsOpen(true)}
       />
-    </div>
+    </main>
   )
 }

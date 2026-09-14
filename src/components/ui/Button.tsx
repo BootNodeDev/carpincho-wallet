@@ -8,17 +8,17 @@ const BASE_INTERACTIVE =
   'duration-200 ease-out active:scale-[0.98] disabled:active:scale-100 ' +
   'focus-visible:outline-none focus-visible:shadow-focus'
 
-export const GHOST_BUTTON_CLASS = `${BASE_INTERACTIVE} border-0 bg-transparent text-primary enabled:hover:text-primary-hover text-[0.95rem] font-semibold p-0`
+export const GHOST_BUTTON_CLASS = `${BASE_INTERACTIVE} border-0 bg-transparent text-primary-text enabled:hover:text-primary-hover text-[0.95rem] font-semibold p-0`
 
 export const ICON_BUTTON_CLASS =
   'inline-grid place-items-center text-muted-foreground transition-colors ' +
-  'enabled:hover:text-primary enabled:hover:bg-primary-soft ' +
+  'enabled:hover:text-primary-text enabled:hover:bg-primary-soft ' +
   'focus-visible:outline-none focus-visible:shadow-focus'
 
 // Like ICON_BUTTON_CLASS but no hover background fill — for icons inline beside text.
 export const PLAIN_ICON_BUTTON_CLASS =
   'inline-grid place-items-center rounded-sm text-muted-foreground transition-colors ' +
-  'hover:text-primary focus-visible:outline-none focus-visible:shadow-focus'
+  'hover:text-primary-text focus-visible:outline-none focus-visible:shadow-focus'
 
 // Primary chrome recoloured for destructive actions; layout (e.g. w-full) is left to the caller.
 const DANGER_OVERRIDE =
@@ -32,7 +32,7 @@ const VARIANT_CLASS = {
     'before:opacity-0 before:transition-opacity before:duration-200 enabled:hover:before:opacity-100',
   secondary:
     `${BASE_INTERACTIVE} py-2.5 px-4 leading-none rounded-md font-semibold text-[0.94rem] text-foreground ` +
-    'bg-surface border border-border-strong enabled:hover:bg-muted enabled:hover:text-primary',
+    'bg-surface border border-border-strong enabled:hover:bg-muted enabled:hover:text-primary-text',
   ghost: GHOST_BUTTON_CLASS,
 } as const
 

@@ -1,8 +1,11 @@
-import { Core } from '@walletconnect/core'
-import { formatJsonRpcError, formatJsonRpcResult } from '@walletconnect/jsonrpc-utils'
-import SignClient from '@walletconnect/sign-client'
+// The WalletConnect SDK is the heaviest dependency the wallet has, and pairing over it is
+// web-only: the extension talks to a dApp through the runtime bridge and never touches it.
+// So every import of it below is dynamic and every export here is already async, which
+// keeps the SDK out of the popup's startup path. `import type` is erased at build time,
+// so the type-only lines cost nothing. Keep it that way — a plain `import` of any
+// @walletconnect package puts the whole SDK back into the main chunk.
+import type SignClient from '@walletconnect/sign-client'
 import type { SignClientTypes } from '@walletconnect/types'
-import { getSdkError } from '@walletconnect/utils'
 import { getWalletServiceNetworkId } from '@/api/walletService'
 import { CIP103_EVENTS } from '@/provider/events'
 import type { ProviderResponder } from '@/provider/types'
@@ -66,8 +69,12 @@ export const getSignClient = async (): Promise<InstanceType<typeof SignClient>> 
   }
   signClientProjectId = projectId
   signClientPromise = (async () => {
+    const [{ Core }, { default: SignClientCtor }] = await Promise.all([
+      import('@walletconnect/core'),
+      import('@walletconnect/sign-client'),
+    ])
     const core = new Core({ projectId, customStoragePrefix: 'carpincho-wallet' })
-    return await SignClient.init({
+    return await SignClientCtor.init({
       core,
       metadata: {
         name: 'Carpincho Wallet',
@@ -133,7 +140,10 @@ export const approveProposal = async (args: {
 }
 
 export const rejectProposal = async (proposalId: number): Promise<void> => {
-  const client = await getSignClient()
+  const [client, { getSdkError }] = await Promise.all([
+    getSignClient(),
+    import('@walletconnect/utils'),
+  ])
   await client.reject({ id: proposalId, reason: getSdkError('USER_REJECTED') })
 }
 
@@ -142,6 +152,7 @@ export const respondWithResult = async <T>(
   requestId: number,
   result: T,
 ): Promise<void> => {
+  const { formatJsonRpcResult } = await import('@walletconnect/jsonrpc-utils')
   await respond({ topic, response: formatJsonRpcResult(requestId, result) })
 }
 
@@ -151,6 +162,7 @@ export const respondWithError = async (
   code: number,
   message: string,
 ): Promise<void> => {
+  const { formatJsonRpcError } = await import('@walletconnect/jsonrpc-utils')
   await respond({ topic, response: formatJsonRpcError(requestId, { code, message }) })
 }
 

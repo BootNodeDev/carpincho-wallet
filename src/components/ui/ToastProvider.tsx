@@ -36,7 +36,11 @@ const BASE_TOAST_CLASS = cn(
 // Per-variant accent: only the rail and icon badge carry colour; message text stays neutral.
 const VARIANT_ACCENT: Record<FeedbackVariant, { rail: string; badge: string; icon: JSX.Element }> =
   {
-    info: { rail: 'before:bg-primary', badge: 'bg-primary-soft text-primary', icon: INFO_ICON },
+    info: {
+      rail: 'before:bg-primary',
+      badge: 'bg-primary-soft text-primary-text',
+      icon: INFO_ICON,
+    },
     success: { rail: 'before:bg-success', badge: 'bg-success-soft text-success', icon: CHECK_ICON },
     warning: {
       rail: 'before:bg-warning',

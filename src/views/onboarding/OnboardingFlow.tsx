@@ -15,7 +15,7 @@ export const OnboardingFlow = (): JSX.Element => {
   const step = !v.hasVault ? 1 : !rpcConfirmed ? 2 : 3
 
   return (
-    <div>
+    <main>
       <WelcomeHero
         description="Canton development wallet."
         layout="compact"
@@ -32,6 +32,6 @@ export const OnboardingFlow = (): JSX.Element => {
         {step === 2 && <ConfigureRpcStep onConfirmed={() => setRpcConfirmed(true)} />}
         {step === 3 && <CreateFirstAccount />}
       </div>
-    </div>
+    </main>
   )
 }

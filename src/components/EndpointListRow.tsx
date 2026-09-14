@@ -46,7 +46,7 @@ export const EndpointListRow = ({
       actions={
         <>
           {active && (
-            <span className="pointer-events-none relative z-10 shrink-0 text-primary">
+            <span className="pointer-events-none relative z-10 shrink-0 text-primary-text">
               {CHECK_ICON}
             </span>
           )}

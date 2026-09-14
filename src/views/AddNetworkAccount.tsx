@@ -25,7 +25,7 @@ export const AddNetworkAccount = (): JSX.Element => {
   })
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <main className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto">
         <WelcomeHero
           description="Canton development wallet."
@@ -58,6 +58,6 @@ export const AddNetworkAccount = (): JSX.Element => {
           onOpenChange={setConnectionOpen}
         />
       )}
-    </div>
+    </main>
   )
 }

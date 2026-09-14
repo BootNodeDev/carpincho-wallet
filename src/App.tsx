@@ -48,10 +48,13 @@ const Shell = (): JSX.Element => {
   }, [showHeader])
   if (view === 'loading') {
     return (
-      <div className="w-popup mx-auto px-3 pt-3 pb-8 min-h-screen flex flex-col items-center justify-center gap-3 text-muted-foreground">
+      <main
+        aria-busy
+        className="w-popup mx-auto px-3 pt-3 pb-8 min-h-screen flex flex-col items-center justify-center gap-3 text-muted-foreground"
+      >
         {SPINNER_ICON}
         <p className="m-0 font-sans text-[0.95rem] font-medium">Loading...</p>
-      </div>
+      </main>
     )
   }
   return (

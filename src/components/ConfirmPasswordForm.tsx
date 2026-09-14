@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useState } from 'react'
+import { type FormEvent, type ReactNode, useId, useState } from 'react'
 import { PrimaryButton } from '@/components/ui/Button'
 import { PasswordInput } from '@/components/ui/PasswordInput'
 import { useVault } from '@/vault/useVault'
@@ -28,6 +28,7 @@ export const ConfirmPasswordForm = ({
   submitTestId,
 }: ConfirmPasswordFormProps): JSX.Element => {
   const v = useVault()
+  const errorId = useId()
   const [current, setCurrent] = useState('')
   const [error, setError] = useState<string | null>(initialError)
   const hasError = error !== null
@@ -52,7 +53,7 @@ export const ConfirmPasswordForm = ({
       <PasswordInput
         aria-label={label}
         data-testid={passwordTestId}
-        aria-errormessage={hasError ? 'confirm-password-error' : undefined}
+        aria-errormessage={hasError ? errorId : undefined}
         placeholder="Current password"
         autoComplete="current-password"
         error={hasError}
@@ -64,7 +65,8 @@ export const ConfirmPasswordForm = ({
       />
       {hasError && (
         <p
-          id="confirm-password-error"
+          id={errorId}
+          role="alert"
           className="text-[0.85rem] text-danger"
         >
           {error}
