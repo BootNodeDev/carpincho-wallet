@@ -7,6 +7,7 @@ import type {
 } from '@/extension/messages'
 import {
   createRuntimeResponder,
+  faviconUrl,
   forgetConnectedOrigin,
   getDirectConnectedOrigins,
   getPendingProviderRequests,
@@ -192,5 +193,27 @@ describe('extension runtime client', () => {
 
     // The footer receives the new origins until it unsubscribes.
     assert.deepEqual(received, [['http://localhost:3012']])
+  })
+
+  it('builds a favicon url against Chrome own cache', () => {
+    // Scenario: the connected dApps list needs each site icon without asking that site for it.
+    Object.defineProperty(globalThis, 'chrome', {
+      configurable: true,
+      value: {
+        runtime: { getURL: (path: string) => `chrome-extension://carpincho${path}` },
+      },
+    })
+
+    assert.equal(
+      faviconUrl('https://dapp.example'),
+      'chrome-extension://carpincho/_favicon/?pageUrl=https%3A%2F%2Fdapp.example&size=32',
+    )
+  })
+
+  it('has no favicon url off the extension', () => {
+    // Scenario: the wallet also runs as a plain web page, where the icon falls back to a monogram.
+    Object.defineProperty(globalThis, 'chrome', { configurable: true, value: undefined })
+
+    assert.equal(faviconUrl('https://dapp.example'), undefined)
   })
 })

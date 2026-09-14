@@ -6,7 +6,7 @@ import { DangerConfirm } from '@/components/ui/DangerConfirm'
 import { Sheet } from '@/components/ui/Sheet'
 import { toast } from '@/components/ui/toast'
 import { useExtensionDappConnection } from '@/extension/dappConnection'
-import { forgetConnectedOrigin, isExtensionRuntime } from '@/extension/runtimeClient'
+import { disconnectOrigin, isExtensionRuntime } from '@/extension/runtimeClient'
 import { useNetwork } from '@/network/useNetwork'
 import { sortAccounts } from '@/utils/account'
 import { useVault } from '@/vault/useVault'
@@ -128,11 +128,7 @@ export const HomeView = (): JSX.Element => {
         return undefined
       }
       const { origin } = dapp
-      return () => {
-        void forgetConnectedOrigin(origin).catch((err: Error) =>
-          toast.error(`Disconnect failed: ${err.message}`),
-        )
-      }
+      return () => disconnectOrigin(origin)
     }
     return connectedSession === undefined
       ? undefined

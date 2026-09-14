@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ConnectedDappsMenu } from '@/components/menu/ConnectedDappsMenu'
 import { MenuList } from '@/components/menu/MenuList'
 import { type Direction, MENU_LISTS, SCREENS, type Screen } from '@/components/menu/screens'
 import { ThemeMenu } from '@/components/menu/ThemeMenu'
@@ -60,11 +61,10 @@ export const MenuSheet = ({ open, onOpenChange }: MenuSheetProps): JSX.Element =
   }
 
   const config = SCREENS[screen]
-  // WalletConnect URI pairing is web-only (inert in extension mode), so drop it from the drawer there.
-  const list =
-    screen === 'root' && isExtensionRuntime()
-      ? MENU_LISTS.root?.filter((row) => row.to !== 'wallet-connect')
-      : MENU_LISTS[screen]
+  const runtime = isExtensionRuntime() ? 'extension' : 'web'
+  const list = MENU_LISTS[screen]?.filter(
+    (row) => row.runtime === undefined || row.runtime === runtime,
+  )
   const animationClass =
     direction === 'forward' ? 'animate-slide-in-right' : 'animate-slide-in-left'
 
@@ -96,6 +96,7 @@ export const MenuSheet = ({ open, onOpenChange }: MenuSheetProps): JSX.Element =
         {screen === 'wallet-connect' && (
           <WalletConnectMenu onPaired={() => handleOpenChange(false)} />
         )}
+        {screen === 'connected-dapps' && <ConnectedDappsMenu />}
         {screen === 'theme' && <ThemeMenu />}
         {screen === 'password' && <PasswordForm />}
         {screen === 'auto-lock' && <AutoLockList />}
