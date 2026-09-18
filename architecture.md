@@ -25,7 +25,7 @@
 
 ```
 src/
-  api/              JSON-RPC client for the external wallet-service backend, plus
+  api/              JSON-RPC client for the Splice Wallet Gateway's User API, plus
                     interactiveSubmission.ts (prepare -> local sign -> execute orchestration)
   assets/           SVG brand assets (carpincho-logo.svg)
   components/       Shared UI components (Logo, Header, WelcomeHero, AccountCard,
@@ -52,19 +52,22 @@ src/
   theme/            ThemeProvider + ThemeContext + useTheme hook driving the
                     [data-theme] attribute on <html>
   cip56/            Token-standard domain logic: holdings/UTXO summaries, transfers, amount formatting,
-                    and Amulet preapproval; calls wallet-service cip56.* / amulet.* RPC
-  ledger/           Raw ledger reads and writes behind the Utils tab (active contracts,
-                    create contract, exercise choice) plus the party-hosting lookup that
-                    scopes the vault's accounts
+                    and Amulet preapproval; reads the ACS directly and builds its commands
+                    with @canton-network/wallet-sdk
+  ledger/           Everything Canton-facing: the gateway session (discovery + token), the
+                    participant HTTP client, paged ACS interface reads, interactive
+                    submission, external-party onboarding, DAR upload, reachability, the
+                    on-demand wallet SDK, and the party-hosting lookup that scopes accounts
   hooks/            React Query wrappers over cip56/ (token holdings, pending transfers,
                     Amulet preapproval), over the party-hosting lookup, and over
-                    wallet-service status (the endpoint in use, endpoint reachability),
+                    ledger reachability (the endpoint in use, endpoint reachability),
                     with polling and imperative refetch
-  config/           Runtime config persisted to localStorage (the saved wallet-service
-                    endpoints and the id of the one in use) plus the shared QueryClient factory
+  config/           Runtime config persisted to localStorage (the saved gateway endpoints
+                    and the id of the one in use) plus the shared QueryClient factory and
+                    the dev-server proxy paths
   extension/        Chrome extension scripts: background, the content script, provider
                     injection, and the wire message types shared by all of them
-  network/          One shared poll of the wallet-service status, so the network in use is read
+  network/          One shared poll of the ledger status, so the network in use is read
                     from a single place (NetworkProvider + useNetwork)
   provider/         CIP-0103 wallet provider — request dispatcher and method handlers
   vault/            Encrypted local vault: PBKDF2 key derivation, AES-GCM storage, React context,
@@ -119,10 +122,10 @@ Implements the Canton wallet provider standard. Any dApp request (from WalletCon
 
 - **`dispatch.ts`** — Central request router. Maps method names to handlers and returns a `DispatchResult` with status `handled`, `pending-approval`, or `error`.
 - **`methods.ts`** — Canonical method name constants plus legacy `canton_*` aliases for backwards compatibility. Also defines the per-method access tier (`ACCESS_TIER` / `accessTier(method)`) that the injected-provider gate consults, with unknown methods defaulting to the most restrictive tier (fail safe).
-- **`walletService.ts`** — Forwards ledger-read methods (`ledgerApi`, `prepareExecute`, etc.) to the external wallet-service JSON-RPC endpoint.
+- **`ledgerPassthrough.ts`** — Forwards the dApp's `ledgerApi` method to the participant. A dApp names the route as a template and its ids separately (`resource: '/v2/users/{user-id}'` plus `path: { 'user-id': … }`), the way the gateway's own `ledgerApi` takes them, because the participant rejects an id the caller interpolated; this is where those are substituted and `query` is appended. A template with no matching value is refused rather than forwarded raw, which is otherwise a confusing `Malformed user-id` from the ledger.
 - **`accounts.ts`** — Adapts internal `AccountPublic` records to the CIP-0103 wire format.
 - **`events.ts`** — The one list of CIP-0103 events the wallet pushes (`accountsChanged`, `connected`, `statusChanged`, `txChanged`). The WalletConnect session declares it at approval time and `broadcastWalletEvent` is typed by it, so a dApp is offered the same set however it connected. `statusChangedPayload` builds that event's body, so the vault and the service worker cannot describe the same wallet two ways.
-- **`status.ts`** — Builds the `status` answer from wallet-service, degrading to "not network connected" rather than failing when the endpoint is unreachable. `provider.userUrl` is where this copy of the wallet lives — the packaged page in the extension, the app's own origin on the web build — because `sdk.open()` reads that field and throws without it.
+- **`status.ts`** — Builds the `status` answer from the gateway and the participant it names, degrading to "not network connected" rather than failing when either is unreachable. `provider.userUrl` is where this copy of the wallet lives — the packaged page in the extension, the app's own origin on the web build — because `sdk.open()` reads that field and throws without it.
 
 ### WalletConnect Integration (`src/wc/`)
 
@@ -151,19 +154,19 @@ Connects the extension popup UI to web pages and the extension background.
 
 ### CIP-56 Token Operations (`src/cip56/` + `src/hooks/` + `src/api/interactiveSubmission.ts`)
 
-Token balances, transfers, and Amulet auto-accept are layered on top of the wallet-service JSON-RPC bridge and React Query.
+Token balances, transfers, and Amulet auto-accept are layered on top of the participant's JSON Ledger API, the wallet SDK, and React Query. Reads come from the active-contract snapshot; writes have their commands built by the SDK and are signed locally.
 
-- **`cip56/holdings.ts`** — Groups raw token UTXOs into per-instrument summaries (`summarizeTokenHoldings`) and exposes `listTokenHoldingSummaries` / `listTokenHoldings`, which call the wallet-service `cip56.listHoldingSummary` / `cip56.listHoldings` methods.
+- **`cip56/holdings.ts`** — Groups raw token UTXOs into per-instrument summaries (`summarizeTokenHoldings`) and exposes `listTokenHoldingSummaries` / `listTokenHoldings`, both reading the Holding interface view from the ACS. There is no separate balance source any more: wallet-service could answer a summary from Scan without listing the UTXOs, the participant cannot, so the summary is derived from the same read the detail list uses.
 - **`cip56/transfers.ts`** — `listPendingIncomingTransfers` reads pending CIP-56 transfers (the ledger returns every instruction the party is a stakeholder on, so the list spans both directions) and `transferDirection` classifies each as incoming or outgoing relative to the active party; `acceptPendingTransfer` and `createTokenTransfer` run write flows through `executePreparedCommands`.
-- **`cip56/amuletPreapproval.ts`** — `getAmuletPreapprovalStatus` reads the Amulet auto-accept (preapproval) state; `createAmuletPreapproval` / `cancelAmuletPreapproval` toggle it via `executePreparedCommands`.
-- **`api/interactiveSubmission.ts`** — `executePreparedCommands` orchestrates the Canton interactive submission pattern: wallet-service `prepareTransaction`, then local signing through the Vault (`signMessage`), then wallet-service `executePrepared`, then an optional `recordTransaction`. It is the single write path for every token transfer and preapproval action, keeping command preparation and ledger submission on the wallet-service while signing stays local.
+- **`cip56/amuletPreapproval.ts`** — `getAmuletPreapprovalStatus` reads the Amulet auto-accept (preapproval) state from Scan through `sdk.amulet.preapproval.fetchQuick`, because the preapproval is a contract the wallet's own party is not a stakeholder on; `createAmuletPreapproval` / `cancelAmuletPreapproval` toggle it via `executePreparedCommands`. Create only produces a `TransferPreapprovalProposal`; the validator's automation is what turns it into a `TransferPreapproval`, so the toggle can lag the command by a few seconds until the status poll catches up.
+- **`api/interactiveSubmission.ts`** — `executePreparedCommands` orchestrates the Canton interactive submission pattern against the participant: `POST /v2/interactive-submission/prepare`, then local signing through the Vault (`signMessage`), then `POST /v2/interactive-submission/executeAndWait`, then an optional `recordTransaction`. It is the single write path for every token transfer, preapproval action, ledger utility and dApp-approved request. The signature travels as `partySignatures`, whose `signedBy` is the party's own namespace fingerprint — an external party's namespace is the fingerprint of the key that authorizes it, and the party id carries it after the `::`. `onPrepared` / `onSigned` hooks exist so a caller can report progress between the steps, which is what lets the dApp approval flow emit `txChanged` as it goes.
 - **`hooks/`** — Thin React Query wrappers: `useTokenHoldings` and `usePendingCip56Transfers` poll every 5 s; `useTokenHoldingDetails` lazy-loads a token's UTXOs when its detail modal opens; `useAmuletPreapproval` polls status and exposes `toggle(next)`. Every query key carries the account id, which belongs to one network for the life of the vault entry, so switching endpoint switches the key and no holdings, transfers or preapproval state survives the move. `AssetsPanel` / `AutoAcceptSetting`, `TokenDetailSheet`, and `ActivityPanel` consume these hooks.
 
 ### Server state: one rule
 
 Reads use `useQuery`. Writes use `useMutation` plus `invalidateQueries` for every cache the write affects. No component keeps a `useState` busy flag for a server call: `isPending` is the busy flag, `error` is the failure, and `variables` is what the call asked for — which is how the Accept row hides itself while the accept is in flight, and how the auto-accept switch keeps reading the value the last toggle asked for until a polled status agrees with it.
 
-Every request runs with `networkMode: 'always'` (set in the shared client factory), reads included. wallet-service can sit on localhost, so the browser calling itself offline says nothing about reachability, and the default parks the call instead of attempting it: a parked write leaves a promise that never settles, and a parked read reports neither data nor error, so the footer says disconnected and no poll can correct it.
+Every request runs with `networkMode: 'always'` (set in the shared client factory), reads included. The gateway and the participant can sit on localhost, so the browser calling itself offline says nothing about reachability, and the default parks the call instead of attempting it: a parked write leaves a promise that never settles, and a parked read reports neither data nor error, so the footer says disconnected and no poll can correct it.
 
 Keys live in [`src/config/queryKeys.ts`](src/config/queryKeys.ts) — never inline a key literal at a call site, or a write cannot find what a read wrote. That module also exports `invalidateTokenState`, the holdings + holding-details + pending-transfers trio that every token write (accept, send, tap Amulet) refreshes as one, and `invalidateActiveContracts`, which the two ledger writes in the Utils tab run. Holding details are marked stale without refetching: only the token detail sheet reads them, and the one write reachable from there closes the sheet as it lands.
 
@@ -171,16 +174,18 @@ Await the invalidation inside `onSuccess` only when the mutation has to stay pen
 
 ### Data Access Layer
 
-The app communicates with two external systems:
+The app communicates with these external systems:
 
 | System | Module | Notes |
 |--------|--------|-------|
-| wallet-service JSON-RPC | `src/api/walletService.ts` | Wraps all RPC calls; the URL is the endpoint in use, resolved with `activeRpcUrl` from `src/config/runtimeConfig.ts` |
+| Splice Wallet Gateway (User API) | `src/api/walletGateway.ts` | `listNetworks` names the participant and mints nothing; `selfSignedAccessToken` returns the bearer token. Both are unauthenticated, which is what makes discovery possible before the wallet holds anything. `getNetwork` is admin-only, so `listNetworks` is the only discovery route |
+| Canton participant (JSON Ledger API) | `src/ledger/ledgerApi.ts` | Every read and write, with the gateway's token. Caches one session per gateway + network; a 401 clears it and retries once, so an expired token costs a retry rather than a failed read |
+| CIP-56 registry + Scan | `src/ledger/walletSdk.ts` | `@canton-network/wallet-sdk`, dynamic-imported so it stays out of the popup's startup chunk. Builds transfer and Amulet commands; handed the gateway's token, which the validator's scan-proxy also accepts |
 | Injected extension provider | `src/extension/contentScript.ts` | Answers a dApp's `canton:requestProvider` with `canton:announceProvider` and relays provider requests through the extension runtime |
 | dApp SDK wire types | `@canton-network/core-types` | The `SpliceMessage` schema and `JsonRpcRequest` / `JsonRpcResponse` that `src/extension/messages.ts` types the wire frames from, so an upstream change is a build error rather than a dropped event |
 | WalletConnect relay | `src/wc/client.ts` | Optional fallback sign client connected to Reown relay using `VITE_WC_PROJECT_ID` |
 
-Components must never call these systems directly. All wallet-service calls go through `src/provider/walletService.ts`; injected-provider requests are bridged by `src/extension/contentScript.ts` / `src/extension/background.ts`, and WalletConnect events are handled by the `src/wc/client.ts` subscriptions wired in `src/views/home/useWalletConnectLifecycle.ts`. Both paths forward to the provider dispatcher.
+Components must never call these systems directly. A dApp's ledger calls go through `src/provider/ledgerPassthrough.ts`; injected-provider requests are bridged by `src/extension/contentScript.ts` / `src/extension/background.ts`, and WalletConnect events are handled by the `src/wc/client.ts` subscriptions wired in `src/views/home/useWalletConnectLifecycle.ts`. Both paths forward to the provider dispatcher.
 
 ## Data Flow
 
@@ -190,7 +195,8 @@ flowchart TD
   wc["src/wc/client.ts subscriptions"]
   direct["src/extension/directProvider.ts"]
   dispatch["src/provider/dispatch.ts"]
-  api["src/api/walletService.ts"]
+  api["src/ledger/ledgerApi.ts"]
+  gw["Splice Wallet Gateway"]
   vault["src/vault/VaultContext.tsx"]
   canton["Canton participant node"]
 
@@ -200,11 +206,12 @@ flowchart TD
   direct --> dispatch
   dispatch -->|"read-only"| api
   dispatch -->|"signing / approval"| vault
+  api -->|"discovery + token"| gw
   api --> canton
   vault --> canton
 ```
 
-State mutations (unlock, add account, sign) go through `VaultContext`. Network calls go through `src/api/walletService.ts`. The provider dispatcher never touches `localStorage` directly.
+State mutations (unlock, add account, sign) go through `VaultContext`. Ledger calls go through `src/ledger/ledgerApi.ts`, which resolves the participant and its token from the gateway before every one of them. The provider dispatcher never touches `localStorage` directly.
 
 ## Environment Variables
 
@@ -213,7 +220,7 @@ State mutations (unlock, add account, sign) go through `VaultContext`. Network c
 | `VITE_WC_PROJECT_ID` | Optional WalletConnect / Reown project ID (from cloud.reown.com), only needed for the WalletConnect fallback |
 | `VITE_MIN_PASSWORD_SCORE` | Optional minimum zxcvbn score (0-4) to accept a vault password. Defaults to 1; read in `src/vault/passwordStrength.ts` |
 
-Runtime-only configuration (the saved wallet-service endpoints and the id of the one in use) is stored in `localStorage` via `src/config/runtimeConfig.ts` under `carpincho.runtime-config.v3`, mirrored into `chrome.storage.local` for the MV3 worker, and is not an environment variable. A v2 install that held a single `walletServiceRpcUrl` is read once and kept as the first saved endpoint. The Canton network identity is no longer stored locally — it comes from wallet-service status.
+Runtime-only configuration (the saved gateway endpoints and the id of the one in use) is stored in `localStorage` via `src/config/runtimeConfig.ts` under `carpincho.runtime-config.v4`, mirrored into `chrome.storage.local` for the MV3 worker, and is not an environment variable. Each endpoint holds the gateway's User API url, the client secret used to mint a token, and the validator, Scan and registry urls the wallet SDK needs; the participant url and the network id are not stored, because the gateway reports both. A `v3` or `v2` install held wallet-service RPC urls, which no gateway answers at, so those keys are dropped rather than migrated to an endpoint every request would fail against.
 
 ## Scripts
 
@@ -268,7 +275,7 @@ Three providers wrap the app. `ThemeProvider` is mounted outermost (in `src/main
       </TooltipProvider>
 ```
 
-There is no router. `Shell` picks one view from `useVault()` via the pure `selectShellView` helper in `src/App.tsx`, branching on `hasVault`, `isLocked`, `accounts.length` and `hostedElsewhereCount`: no vault → `OnboardingFlow` starting at the create-vault step; unlocked vault with no account at all → `OnboardingFlow` which runs the Configure RPC step (gated on a wallet-service probe) then the create-first-account step, which presents two tabs — "Create new account" and "Restore from backup", where the restore tab reuses the dashboard `ImportVaultForm` to merge a backup's accounts under the new local vault password and never creates a Canton party; unlocked vault whose accounts the endpoint in use does not host → `AddNetworkAccount`, which asks only for a new account (a backup of this vault would import nothing: every entry is a party the vault already holds) and keeps the connection footer so switching endpoint is the way out; locked vault → `UnlockView`; unlocked vault with at least one account this endpoint hosts → `HomeView`. While `useVault()` reports `isLoading`, `Shell` renders a centred spinner instead of any view so the session-restore decision lands in one paint and the Unlock screen never flashes.
+There is no router. `Shell` picks one view from `useVault()` via the pure `selectShellView` helper in `src/App.tsx`, branching on `hasVault`, `isLocked`, `accounts.length` and `hostedElsewhereCount`: no vault → `OnboardingFlow` starting at the create-vault step; unlocked vault with no account at all → `OnboardingFlow` which runs the Configure RPC step (gated on a gateway probe) then the create-first-account step, which presents two tabs — "Create new account" and "Restore from backup", where the restore tab reuses the dashboard `ImportVaultForm` to merge a backup's accounts under the new local vault password and never creates a Canton party; unlocked vault whose accounts the endpoint in use does not host → `AddNetworkAccount`, which asks only for a new account (a backup of this vault would import nothing: every entry is a party the vault already holds) and keeps the connection footer so switching endpoint is the way out; locked vault → `UnlockView`; unlocked vault with at least one account this endpoint hosts → `HomeView`. While `useVault()` reports `isLoading`, `Shell` renders a centred spinner instead of any view so the session-restore decision lands in one paint and the Unlock screen never flashes.
 
 The Menu drawer lives in `src/components/menu/`: `MenuSheet.tsx` is the navigation orchestrator (wraps the shared `Sheet` primitive with `side="right"`, opening as a 400px-wide top-aligned panel clamped by `100vw` that slides in via `animate-sheet-slide-right`), `screens.ts` holds the `Screen` union plus the `SCREENS` metadata map and the `MENU_LISTS` row data for the navigation-list screens, `MenuList.tsx` renders those rows, and `ThemeMenu.tsx` is the Theme leaf. It manages internal screen state (`root` → `theme` | `vault` | `connected-dapps`; `vault` → `password` | `auto-lock` | `export-vault` | `import-vault`); each in-drawer transition uses `animate-slide-in-right` (forward) or `animate-slide-in-left` (back). Navigation-list screens are data-driven via `MENU_LISTS`; leaf screens (`connected-dapps`, `theme`, `password`, `auto-lock`, `export-vault`, `import-vault`) render a component. A root row carrying `runtime: 'extension' | 'web'` is dropped in the other runtime, because it has nothing to show there: `WalletConnect` is web-only, `Connected dApps` extension-only. Every new option must be added as another `Screen` with an entry in the `SCREENS` map (`title`, `description`, `parent`); accordion-style expansion inside a screen is disallowed.
 
