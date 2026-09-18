@@ -3,7 +3,7 @@ import { PrimaryButton } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ALERT_CIRCLE_ICON, SPINNER_ICON } from '@/components/ui/icons'
 import { TextInput } from '@/components/ui/TextInput'
-import { activeRpcUrl, withActiveEndpointUrl } from '@/config/runtimeConfig'
+import { activeGatewayUrl, withActiveEndpointUrl } from '@/config/runtimeConfig'
 import { useRuntimeConfig } from '@/config/useRuntimeConfig'
 import { useWalletServiceTest } from '@/hooks/useWalletServiceTest'
 import { cn } from '@/utils/cn'
@@ -25,7 +25,7 @@ export interface ConfigureRpcStepProps {
 
 export const ConfigureRpcStep = ({ onConfirmed }: ConfigureRpcStepProps): JSX.Element => {
   const { config, saveConfig } = useRuntimeConfig()
-  const [url, setUrl] = useState(() => activeRpcUrl(config))
+  const [url, setUrl] = useState(() => activeGatewayUrl(config))
   const fieldId = useId()
   const { state, networkId, reason, testedUrl, test } = useWalletServiceTest()
 
@@ -64,7 +64,7 @@ export const ConfigureRpcStep = ({ onConfirmed }: ConfigureRpcStepProps): JSX.El
 
   return (
     <Card>
-      <label htmlFor={fieldId}>Wallet-service RPC URL</label>
+      <label htmlFor={fieldId}>Wallet Gateway URL</label>
       <TextInput
         id={fieldId}
         type="url"
@@ -87,7 +87,7 @@ export const ConfigureRpcStep = ({ onConfirmed }: ConfigureRpcStepProps): JSX.El
               aria-hidden="true"
               className="size-2 shrink-0 rounded-full bg-success"
             />
-            <span>wallet-service reachable</span>
+            <span>gateway reachable</span>
             {network !== undefined && (
               <span className="ml-auto rounded-full border border-success/40 bg-surface px-2 py-0.5 font-mono text-[0.76rem] text-success">
                 {network}
@@ -99,7 +99,7 @@ export const ConfigureRpcStep = ({ onConfirmed }: ConfigureRpcStepProps): JSX.El
           <>
             <span className="shrink-0 [&>svg]:size-4">{ALERT_CIRCLE_ICON}</span>
             <span className="flex flex-col gap-0.5">
-              <span>Can't reach wallet-service</span>
+              <span>Can't reach the gateway</span>
               {reason !== undefined && (
                 <span className="text-[0.78rem] font-normal opacity-85">
                   {reason} — retrying automatically…

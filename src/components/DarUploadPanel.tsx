@@ -1,9 +1,9 @@
 import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
-import { type DarUploadResponse, uploadDarFile } from '@/api/walletService'
 import { PrimaryButton } from '@/components/ui/Button'
 import { FileDropInput } from '@/components/ui/FileDropInput'
 import { toast } from '@/components/ui/toast'
+import { type DarUploadResponse, uploadDarFile } from '@/ledger/packages'
 
 export interface DarUploadApi {
   uploadDarFile: (file: File) => Promise<DarUploadResponse>

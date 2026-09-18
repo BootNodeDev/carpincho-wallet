@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert'
 import { afterEach, beforeEach, describe, it } from 'node:test'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
-import type { WalletServiceStatus } from '@/api/walletService'
 import { loadRuntimeConfig, saveRuntimeConfig, withActiveEndpointUrl } from '@/config/runtimeConfig'
+import type { LedgerStatus } from '@/ledger/status'
 import { NetworkContext } from '@/network/NetworkContext'
 import type { Cip103WalletAccount } from '@/provider/accounts'
 import { installHostedParties } from '@/test-utils/hostedParties'
@@ -11,7 +11,7 @@ import type { VaultContextValue } from '@/vault/VaultContext'
 
 const NETWORK = 'canton:local'
 const PASSWORD = 'correct-horse-battery'
-const OTHER_ENDPOINT = 'http://localhost:4010/rpc'
+const OTHER_ENDPOINT = 'http://localhost:4030/api/v0/user'
 
 const party = (name: string): string => `${name}::ns`
 
@@ -57,7 +57,7 @@ const captureVault = (): { current: VaultContextValue | null } => {
     ref.current = useVault()
     return null
   }
-  const status: WalletServiceStatus = { connected: true, networkId: NETWORK }
+  const status: LedgerStatus = { connected: true, networkId: NETWORK }
   render(
     <NetworkContext.Provider value={status}>
       <TestQueryClientProvider>

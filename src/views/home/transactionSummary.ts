@@ -19,6 +19,10 @@ export const transactionCommands = (params: Record<string, unknown>): unknown[] 
   return Array.isArray(commands) ? commands : undefined
 }
 
+// The contracts a dApp discloses alongside its commands, which the prepare call needs verbatim.
+export const disclosedContracts = (params: Record<string, unknown>): unknown[] | undefined =>
+  Array.isArray(params.disclosedContracts) ? params.disclosedContracts : undefined
+
 // Counts commands without assuming a specific DAML command shape.
 export const commandCount = (params: Record<string, unknown>): number | undefined => {
   const commands = transactionCommands(params)

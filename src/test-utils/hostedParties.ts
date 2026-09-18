@@ -1,3 +1,6 @@
+import { forgetLedgerSessions } from '@/ledger/ledgerApi'
+import { gatewayResponseFor, isGatewayUrl, TEST_LEDGER_BASE_URL, urlOf } from '@/test-utils/ledger'
+
 type Hosted = readonly string[] | 'all'
 
 const partyFromResource = (resource: string): string =>
@@ -9,21 +12,21 @@ const partyFromResource = (resource: string): string =>
 // Returns the restore function for afterEach.
 export const installHostedParties = (hosted: Hosted | (() => Hosted) = 'all'): (() => void) => {
   const original = globalThis.fetch
-  globalThis.fetch = async (_input, init) => {
-    const request = JSON.parse(String(init?.body ?? '{}')) as {
-      params?: { resource?: string }
+  forgetLedgerSessions()
+  globalThis.fetch = async (input, init) => {
+    if (isGatewayUrl(input)) {
+      return gatewayResponseFor(init)
     }
-    const partyId = partyFromResource(request.params?.resource ?? '')
+    const partyId = partyFromResource(urlOf(input).replace(TEST_LEDGER_BASE_URL, ''))
     const answer = typeof hosted === 'function' ? hosted() : hosted
     const isHosted = answer === 'all' || answer.includes(partyId)
     return new Response(
-      JSON.stringify({
-        result: { partyDetails: isHosted ? [{ party: partyId, isLocal: true }] : [] },
-      }),
+      JSON.stringify({ partyDetails: isHosted ? [{ party: partyId, isLocal: true }] : [] }),
       { status: 200 },
     )
   }
   return () => {
     globalThis.fetch = original
+    forgetLedgerSessions()
   }
 }

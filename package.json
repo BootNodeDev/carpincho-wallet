@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@canton-network/core-types": "^1.11.0",
+    "@canton-network/wallet-sdk": "1.5.3",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource-variable/manrope": "^5.2.8",
     "@noble/ed25519": "^3.1.0",

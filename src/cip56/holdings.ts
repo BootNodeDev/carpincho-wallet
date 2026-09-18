@@ -1,5 +1,5 @@
-import { walletServiceRequest } from '@/api/walletService'
 import { type TokenInstrumentId, tokenDisplayLabel } from '@/cip56/transfers'
+import { activeInterfaceContracts, HOLDING_INTERFACE_ID } from '@/ledger/acs'
 
 export interface TokenHoldingLock {
   holders?: string[]
@@ -29,7 +29,6 @@ export interface TokenHoldingSummary {
   utxoCount?: number
   lockedCount?: number
   unlockedCount?: number
-  source?: 'scan' | 'utxos'
   holdings?: TokenHolding[]
 }
 
@@ -123,10 +122,11 @@ export const filterTokenHoldingsByInstrument = (
     isSameInstrument(holding.interfaceViewValue?.instrumentId, instrumentId),
   )
 
-// Reads fast token balance summaries through wallet-service.
-export const listTokenHoldingSummaries = async (partyId: string): Promise<TokenHoldingSummary[]> =>
-  await walletServiceRequest<TokenHoldingSummary[]>('cip56.listHoldingSummary', { partyId })
-
-// Reads active CIP-56 holding UTXOs through wallet-service.
+// Reads active CIP-56 holding UTXOs from the participant's active-contract snapshot.
 export const listTokenHoldings = async (partyId: string): Promise<TokenHolding[]> =>
-  await walletServiceRequest<TokenHolding[]>('cip56.listHoldings', { partyId })
+  await activeInterfaceContracts<TokenHoldingView>(partyId, HOLDING_INTERFACE_ID)
+
+// Balances are the UTXOs added up. wallet-service could answer this from Scan without listing
+// them; the participant cannot, so the summary is derived from the same read the detail uses.
+export const listTokenHoldingSummaries = async (partyId: string): Promise<TokenHoldingSummary[]> =>
+  summarizeTokenHoldings(await listTokenHoldings(partyId))

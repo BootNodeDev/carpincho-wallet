@@ -6,7 +6,7 @@
 // @walletconnect package puts the whole SDK back into the main chunk.
 import type SignClient from '@walletconnect/sign-client'
 import type { SignClientTypes } from '@walletconnect/types'
-import { getWalletServiceNetworkId } from '@/api/walletService'
+import { activeNetworkId } from '@/ledger/status'
 import { CIP103_EVENTS } from '@/provider/events'
 import type { ProviderResponder } from '@/provider/types'
 
@@ -54,7 +54,7 @@ const getWalletConnectProjectId = (): string =>
   ((import.meta.env.VITE_WC_PROJECT_ID as string | undefined) ?? '').trim()
 
 // Discovers the WalletConnect CAIP-2 chain from wallet-service status.
-export const getCantonChain = async (): Promise<string> => await getWalletServiceNetworkId()
+export const getCantonChain = async (): Promise<string> => await activeNetworkId()
 
 let signClientPromise: Promise<InstanceType<typeof SignClient>> | undefined
 let signClientProjectId: string | undefined

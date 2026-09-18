@@ -1,7 +1,7 @@
 import { PLAIN_ICON_BUTTON_CLASS } from '@/components/ui/Button'
 import { CHECK_ICON, PENCIL_ICON, TRASH_ICON } from '@/components/ui/icons'
 import { SelectableListRow } from '@/components/ui/SelectableListRow'
-import type { WalletServiceEndpoint } from '@/config/runtimeConfig'
+import type { GatewayEndpoint } from '@/config/runtimeConfig'
 import type { Reachability } from '@/hooks/useEndpointReachability'
 import { cn } from '@/utils/cn'
 
@@ -14,7 +14,7 @@ const DOT: Record<Reachability, { className: string; label: string }> = {
 }
 
 interface EndpointListRowProps {
-  endpoint: WalletServiceEndpoint
+  endpoint: GatewayEndpoint
   active: boolean
   reachability: Reachability
   canRemove: boolean

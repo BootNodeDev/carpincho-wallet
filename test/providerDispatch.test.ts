@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
-
+import { forgetLedgerSessions } from '@/ledger/ledgerApi'
 import {
   CANTON_METHOD_GET_ACTIVE_NETWORK,
   CANTON_METHOD_LIST_ACCOUNTS,
@@ -9,6 +9,7 @@ import {
   dispatchProviderRequest,
   type ProviderResponder,
 } from '@/provider/dispatch'
+import { installLedgerStatus } from '@/test-utils/ledger'
 
 const originalFetch = globalThis.fetch
 
@@ -40,9 +41,8 @@ const captureResponder = (): ProviderResponder & {
   }
 }
 
-const installStatusResponse = (body: unknown): void => {
-  globalThis.fetch = (async () =>
-    new Response(JSON.stringify({ result: body }), { status: 200 })) as typeof globalThis.fetch
+const installStatusResponse = (networkId: string): void => {
+  installLedgerStatus({ networkId })
 }
 
 const installNetworkFailure = (): void => {
@@ -55,6 +55,7 @@ describe('provider request dispatch', () => {
   afterEach(() => {
     globalThis.fetch = originalFetch
     localStorage.clear()
+    forgetLedgerSessions()
   })
 
   it('returns CIP-0103 accounts through an injected responder', async () => {
@@ -101,13 +102,10 @@ describe('provider request dispatch', () => {
     assert.equal(responder.errors.length, 0)
   })
 
-  it('returns the active network discovered from wallet-service status', async () => {
-    // Scenario: dApps ask Carpincho for the active Canton network, and Carpincho must use
-    // wallet-service as the source of truth instead of a manually configured fallback.
-    installStatusResponse({
-      connection: { isNetworkConnected: true },
-      network: { networkId: 'canton:from-status' },
-    })
+  it('returns the active network the gateway names', async () => {
+    // Scenario: dApps ask Carpincho for the active Canton network, and the gateway is the only
+    // thing that names one, instead of a manually configured fallback.
+    installStatusResponse('canton:from-status')
     const responder = captureResponder()
 
     // Action: dispatch the same JSON-RPC method exposed by wallet-gateway.
@@ -117,35 +115,36 @@ describe('provider request dispatch', () => {
       responder,
     )
 
-    // Expected result: the response uses the network reported by wallet-service status.
+    // Expected result: the response uses the network the gateway reported.
     assert.deepEqual(result, { status: 'handled' })
     assert.equal(responder.errors.length, 0)
     assert.deepEqual(responder.results, [{ networkId: 'canton:from-status' }])
   })
 
-  it('fails getActiveNetwork when wallet-service status is unavailable', async () => {
-    // Scenario: no wallet-service status means Carpincho cannot know the active network.
-    // This prevents dApps from silently receiving a hard-coded local network.
+  it('fails getActiveNetwork when the gateway is unavailable', async () => {
+    // Scenario: with no gateway there is nothing that names the active network. This prevents
+    // dApps from silently receiving a hard-coded local network.
     installNetworkFailure()
     const responder = captureResponder()
 
-    // Action: ask for active network while wallet-service is unreachable.
+    // Action: ask for active network while the gateway is unreachable.
     const result = await dispatchProviderRequest(
       { method: CANTON_METHOD_GET_ACTIVE_NETWORK },
       () => ({ accounts: [account], primary: account }),
       responder,
     )
 
-    // Expected result: the provider reports an error and returns no fallback network.
+    // Expected result: the provider reports an error and returns no fallback network. The
+    // message names Canton, not a service Carpincho no longer talks to.
     assert.deepEqual(result, { status: 'error' })
     assert.equal(responder.results.length, 0)
-    assert.match(responder.errors[0]?.message ?? '', /wallet-service/i)
+    assert.match(responder.errors[0]?.message ?? '', /^canton: /)
   })
 
-  it('does not attach a fallback network to status when wallet-service omits it', async () => {
-    // Scenario: wallet-service can answer without a network object, for example while
-    // disconnected. Carpincho should pass that shape through instead of inventing one.
-    installStatusResponse({ connection: { isNetworkConnected: false, networkReason: 'syncing' } })
+  it('does not attach a fallback network to status when the gateway cannot be reached', async () => {
+    // Scenario: with no gateway there is no network to name. Carpincho should still answer
+    // status, and leave the field off instead of inventing one.
+    installNetworkFailure()
     const responder = captureResponder()
 
     // Action: dispatch status, which is the same discovery path used by wallet-gateway.
@@ -156,6 +155,7 @@ describe('provider request dispatch', () => {
     )
 
     // Expected result: status is handled, but the payload has no network field.
+    // Connect must survive a missing gateway, so this is not an error.
     assert.deepEqual(result, { status: 'handled' })
     assert.equal(responder.errors.length, 0)
     assert.equal((responder.results[0] as { network?: unknown }).network, undefined)

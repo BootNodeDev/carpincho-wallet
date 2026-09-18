@@ -1,4 +1,5 @@
 import { accountToCip103Wallet } from '@/provider/accounts'
+import { forwardToLedger } from '@/provider/ledgerPassthrough'
 import {
   CANTON_METHOD_CONNECT,
   CANTON_METHOD_DISCONNECT,
@@ -20,7 +21,6 @@ import type {
   ProviderRequest,
   ProviderResponder,
 } from '@/provider/types'
-import { forwardToWalletService } from '@/provider/walletService'
 import { accountConnection } from '@/wc/accounts'
 
 export * from '@/provider/methods'
@@ -31,12 +31,13 @@ export type {
   ProviderResponder,
 } from '@/provider/types'
 
-// Converts wallet-service discovery failures into JSON-RPC provider errors.
-const respondWalletServiceError = async (
+// Converts network discovery failures into JSON-RPC provider errors. The prefix reaches the
+// dApp, so it names Canton rather than a service Carpincho no longer talks to.
+const respondDiscoveryError = async (
   responder: ProviderResponder,
   error: unknown,
 ): Promise<DispatchResult> => {
-  await responder.error(-32000, `wallet-service: ${(error as Error).message}`)
+  await responder.error(-32000, `canton: ${(error as Error).message}`)
   return { status: 'error' }
 }
 
@@ -55,7 +56,7 @@ export const dispatchProviderRequest = async (
       await responder.result(accountConnection({ accounts, primary }, status.connection))
       return { status: 'handled' }
     } catch (error) {
-      return await respondWalletServiceError(responder, error)
+      return await respondDiscoveryError(responder, error)
     }
   }
   if (method === CANTON_METHOD_DISCONNECT) {
@@ -83,7 +84,7 @@ export const dispatchProviderRequest = async (
       })
       return { status: 'handled' }
     } catch (error) {
-      return await respondWalletServiceError(responder, error)
+      return await respondDiscoveryError(responder, error)
     }
   }
   if (method === CANTON_METHOD_GET_ACTIVE_NETWORK) {
@@ -91,7 +92,7 @@ export const dispatchProviderRequest = async (
       await responder.result(await getActiveNetwork())
       return { status: 'handled' }
     } catch (error) {
-      return await respondWalletServiceError(responder, error)
+      return await respondDiscoveryError(responder, error)
     }
   }
   if (method === CANTON_METHOD_SIGN_MESSAGE) {
@@ -104,7 +105,7 @@ export const dispatchProviderRequest = async (
     }
   }
   if (method === CANTON_METHOD_LEDGER_API) {
-    return await forwardToWalletService(request, method, responder)
+    return await forwardToLedger(request, responder)
   }
 
   await responder.error(-32601, `method not supported by Carpincho Wallet: ${request.method}`)

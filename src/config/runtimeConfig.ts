@@ -1,19 +1,37 @@
-export interface WalletServiceEndpoint {
+import { devGatewayUrl, isDevProxy } from '@/config/devProxy'
+
+export interface GatewayEndpoint {
   id: string
   name: string
   url: string
+  networkId?: string
+  clientSecret?: string
+  // Splice services the gateway does not know about. The participant and its token come from
+  // the gateway; CIP-56 transfers and Amulet need these three on top.
+  validatorUrl?: string
+  scanApiUrl?: string
+  registryUrl?: string
 }
 
 export interface RuntimeConfig {
-  endpoints: WalletServiceEndpoint[]
+  endpoints: GatewayEndpoint[]
   activeEndpointId: string
 }
 
-const STORAGE_KEY = 'carpincho.runtime-config.v3'
-// v2 held a single `walletServiceRpcUrl`; it becomes the first saved endpoint.
-const LEGACY_STORAGE_KEY = 'carpincho.runtime-config.v2'
+const STORAGE_KEY = 'carpincho.runtime-config.v4'
+// v3 and v2 held wallet-service RPC urls, which no gateway can be reached at.
+const LEGACY_STORAGE_KEYS = ['carpincho.runtime-config.v3', 'carpincho.runtime-config.v2']
 
-const DEFAULT_RPC_URL = 'http://localhost:3010/rpc'
+// Under `vite dev` the gateway is reached through the proxy, because its allowedOrigins names
+// the dApp rather than the wallet. Every build points straight at it.
+const DEFAULT_GATEWAY_URL = isDevProxy() ? devGatewayUrl() : 'http://localhost:3030/api/v0/user'
+// LocalNet ships this as the self_signed client secret for every gateway network it seeds.
+export const DEFAULT_CLIENT_SECRET = 'unsafe'
+
+// Splice LocalNet as published on the host, the same trio wallet-service defaulted to.
+export const DEFAULT_VALIDATOR_URL = 'http://localhost:2000/api/validator'
+export const DEFAULT_SCAN_API_URL = 'http://scan.localhost:4000/api/scan'
+export const DEFAULT_REGISTRY_URL = 'http://localhost:2000/api/validator/v0/scan-proxy'
 
 type ChromeLocalStorage = {
   get: (keys: string | string[]) => Promise<Record<string, unknown>> | Record<string, unknown>
@@ -74,19 +92,28 @@ export const isEndpointUrl = (url: string): boolean => {
 export const newEndpointId = (): string => crypto.randomUUID()
 
 const singleEndpointConfig = (url: string, name: string): RuntimeConfig => {
-  const endpoint = { id: newEndpointId(), name, url }
+  const endpoint = {
+    id: newEndpointId(),
+    name,
+    url,
+    clientSecret: DEFAULT_CLIENT_SECRET,
+    validatorUrl: DEFAULT_VALIDATOR_URL,
+    scanApiUrl: DEFAULT_SCAN_API_URL,
+    registryUrl: DEFAULT_REGISTRY_URL,
+  }
   return { endpoints: [endpoint], activeEndpointId: endpoint.id }
 }
 
 export const defaultRuntimeConfig = (): RuntimeConfig =>
-  singleEndpointConfig(DEFAULT_RPC_URL, 'Local')
+  singleEndpointConfig(DEFAULT_GATEWAY_URL, 'Local')
 
 // Falls back to the first entry so a config whose active id went missing still resolves.
-export const activeRpcUrl = (config: RuntimeConfig): string =>
-  (
-    config.endpoints.find((endpoint) => endpoint.id === config.activeEndpointId) ??
-    config.endpoints[0]
-  )?.url ?? DEFAULT_RPC_URL
+export const activeEndpoint = (config: RuntimeConfig): GatewayEndpoint | undefined =>
+  config.endpoints.find((endpoint) => endpoint.id === config.activeEndpointId) ??
+  config.endpoints[0]
+
+export const activeGatewayUrl = (config: RuntimeConfig): string =>
+  activeEndpoint(config)?.url ?? DEFAULT_GATEWAY_URL
 
 // Onboarding edits the endpoint in use instead of adding one; its name follows the host.
 export const withActiveEndpointUrl = (config: RuntimeConfig, url: string): RuntimeConfig => {
@@ -105,8 +132,8 @@ export const withActiveEndpointUrl = (config: RuntimeConfig, url: string): Runti
   }
 }
 
-const sanitizeEndpoint = (raw: unknown): WalletServiceEndpoint | undefined => {
-  const endpoint = raw as Partial<WalletServiceEndpoint> | null
+const sanitizeEndpoint = (raw: unknown): GatewayEndpoint | undefined => {
+  const endpoint = raw as Partial<GatewayEndpoint> | null
   // Every stored, mirrored and migrated URL passes through here, so this is where whitespace
   // is dropped for good, whatever put it there.
   const url = typeof endpoint?.url === 'string' ? normalizeEndpointUrl(endpoint.url) : ''
@@ -114,24 +141,33 @@ const sanitizeEndpoint = (raw: unknown): WalletServiceEndpoint | undefined => {
     return undefined
   }
   const name = typeof endpoint?.name === 'string' ? endpoint.name.trim() : ''
+  const networkId = typeof endpoint?.networkId === 'string' ? endpoint.networkId.trim() : ''
+  const clientSecret = typeof endpoint?.clientSecret === 'string' ? endpoint.clientSecret : ''
+  const spliceUrl = (value: unknown): string =>
+    typeof value === 'string' ? normalizeEndpointUrl(value) : ''
+  const validatorUrl = spliceUrl(endpoint?.validatorUrl)
+  const scanApiUrl = spliceUrl(endpoint?.scanApiUrl)
+  const registryUrl = spliceUrl(endpoint?.registryUrl)
   return {
     id: typeof endpoint?.id === 'string' && endpoint.id !== '' ? endpoint.id : newEndpointId(),
     name: name === '' ? endpointNameFromUrl(url) : name,
     url,
+    ...(networkId === '' ? {} : { networkId }),
+    ...(clientSecret === '' ? {} : { clientSecret }),
+    ...(validatorUrl === '' ? {} : { validatorUrl }),
+    ...(scanApiUrl === '' ? {} : { scanApiUrl }),
+    ...(registryUrl === '' ? {} : { registryUrl }),
   }
 }
 
 const sanitizeRuntimeConfig = (raw: unknown): RuntimeConfig => {
-  const stored = raw as (Partial<RuntimeConfig> & { walletServiceRpcUrl?: string }) | null
+  const stored = raw as Partial<RuntimeConfig> | null
   const endpoints = (Array.isArray(stored?.endpoints) ? stored.endpoints : [])
     .map(sanitizeEndpoint)
-    .filter((endpoint): endpoint is WalletServiceEndpoint => endpoint !== undefined)
+    .filter((endpoint): endpoint is GatewayEndpoint => endpoint !== undefined)
 
   if (endpoints.length === 0) {
-    const legacyUrl = stored?.walletServiceRpcUrl?.trim()
-    return legacyUrl === undefined || legacyUrl === ''
-      ? defaultRuntimeConfig()
-      : singleEndpointConfig(legacyUrl, endpointNameFromUrl(legacyUrl))
+    return defaultRuntimeConfig()
   }
 
   const active = endpoints.find((endpoint) => endpoint.id === stored?.activeEndpointId)
@@ -145,16 +181,15 @@ export const loadRuntimeConfig = (): RuntimeConfig => {
       return defaultRuntimeConfig()
     }
     const current = storage.getItem(STORAGE_KEY)
-    const raw = current ?? storage.getItem(LEGACY_STORAGE_KEY)
-    if (raw === null) {
+    if (current === null) {
+      // A stored wallet-service endpoint names a server the gateway never answers at, so the
+      // list is dropped rather than carried over to a url every request would fail against.
+      for (const key of LEGACY_STORAGE_KEYS) {
+        storage.removeItem(key)
+      }
       return defaultRuntimeConfig()
     }
-    const sanitized = sanitizeRuntimeConfig(JSON.parse(raw) as unknown)
-    if (current === null) {
-      // Freeze the migrated list under the new key so endpoint ids stay stable across loads.
-      storage.setItem(STORAGE_KEY, JSON.stringify(sanitized))
-      storage.removeItem(LEGACY_STORAGE_KEY)
-    }
+    const sanitized = sanitizeRuntimeConfig(JSON.parse(current) as unknown)
     persistChromeRuntimeConfig(sanitized)
     return sanitized
   } catch {
@@ -167,8 +202,8 @@ export const loadRuntimeConfigAsync = async (): Promise<RuntimeConfig> => {
   try {
     const storage = chromeLocalStorage()
     if (storage !== undefined) {
-      const stored = await storage.get([STORAGE_KEY, LEGACY_STORAGE_KEY])
-      const config = stored[STORAGE_KEY] ?? stored[LEGACY_STORAGE_KEY]
+      const stored = await storage.get(STORAGE_KEY)
+      const config = stored[STORAGE_KEY]
       if (typeof config === 'object' && config !== null) {
         return sanitizeRuntimeConfig(config)
       }
@@ -192,7 +227,7 @@ export const saveRuntimeConfig = (config: RuntimeConfig): RuntimeConfig => {
 
 // The localStorage prefix wipe cannot reach the extension mirror, so a vault reset clears it here.
 export const clearMirroredRuntimeConfig = async (): Promise<void> => {
-  await Promise.resolve(chromeLocalStorage()?.remove?.([STORAGE_KEY, LEGACY_STORAGE_KEY]))
+  await Promise.resolve(chromeLocalStorage()?.remove?.([STORAGE_KEY, ...LEGACY_STORAGE_KEYS]))
 }
 
 export const subscribeRuntimeConfig = (listener: (config: RuntimeConfig) => void): (() => void) => {

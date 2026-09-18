@@ -1,9 +1,5 @@
-import {
-  type ExecutePreparedResponse,
-  executePreparedCommands,
-  type WalletServiceCommands,
-} from '@/api/interactiveSubmission'
-import { walletServiceRequest } from '@/api/walletService'
+import { type ExecutePreparedResponse, executePreparedCommands } from '@/api/interactiveSubmission'
+import { type TokenSdk, tokenSdk } from '@/ledger/walletSdk'
 import type { AccountPublic } from '@/vault/types'
 import type { VaultContextValue } from '@/vault/VaultContext'
 
@@ -19,7 +15,13 @@ export interface AmuletPreapprovalActionParams {
   account: AccountPublic
   signMessage: VaultContextValue['signMessage']
   recordTransaction?: VaultContextValue['recordTransaction']
+  // The SDK is loaded on demand and talks to Scan and the registry, so it is the seam a
+  // caller substitutes rather than the transport underneath it.
+  sdk?: TokenSdk
 }
+
+// The fixed DevNet faucet amount the Utils tab requests.
+const TAP_AMOUNT = '100'
 
 export interface AmuletTapApi {
   tapAmulet: (params: AmuletPreapprovalActionParams) => Promise<ExecutePreparedResponse>
@@ -35,21 +37,37 @@ const isMissingPreapprovalError = (error: unknown): boolean => {
   return message.includes('CONTRACT_NOT_FOUND') || message.includes('Contract could not be found')
 }
 
-// Reads the current Amulet auto-accept state for a receiver party.
+// Reads the current Amulet auto-accept state for a receiver party. Scan is the source: the
+// preapproval is a contract the wallet's own party is not a stakeholder on.
 export const getAmuletPreapprovalStatus = async (
   receiver: string,
-): Promise<AmuletPreapprovalStatus> =>
-  await walletServiceRequest<AmuletPreapprovalStatus>('amulet.preapproval.status', { receiver })
+  sdk?: TokenSdk,
+): Promise<AmuletPreapprovalStatus> => {
+  const status = await (sdk ?? (await tokenSdk())).amulet.preapproval.fetchQuick(receiver)
+  if (status?.contract == null) {
+    return { active: false, expired: false }
+  }
+  const expiresAt = new Date(status.contract.payload.expiresAt as unknown as string)
+  const expired = expiresAt.getTime() <= Date.now()
+  return {
+    contractId: status.contract.contract_id,
+    templateId: status.contract.template_id,
+    expiresAt: expiresAt.toISOString(),
+    active: !expired,
+    expired,
+  }
+}
 
 // Requests the fixed 100 AMT DevNet faucet command while Carpincho keeps the receiver key local.
 export const tapAmulet = async ({
   account,
   signMessage,
   recordTransaction,
+  sdk,
 }: AmuletPreapprovalActionParams): Promise<ExecutePreparedResponse> => {
-  const { commands, disclosedContracts } = await walletServiceRequest<WalletServiceCommands>(
-    'amulet.tap',
-    { receiver: account.partyId },
+  const [commands, disclosedContracts] = await (sdk ?? (await tokenSdk())).amulet.tap(
+    account.partyId,
+    TAP_AMOUNT,
   )
   return await executePreparedCommands({
     account,
@@ -67,11 +85,14 @@ export const createAmuletPreapproval = async ({
   account,
   signMessage,
   recordTransaction,
+  sdk,
 }: AmuletPreapprovalActionParams): Promise<ExecutePreparedResponse> => {
-  const { commands, disclosedContracts } = await walletServiceRequest<WalletServiceCommands>(
-    'amulet.preapproval.create',
-    { receiver: account.partyId },
-  )
+  // Create is the one preapproval command with nothing to disclose: the proposal is a plain
+  // create, not a choice on a contract the receiver has to be shown.
+  const commands = await (sdk ?? (await tokenSdk())).amulet.preapproval.command.create({
+    parties: { receiver: account.partyId },
+  })
+  const disclosedContracts: unknown[] = []
   return await executePreparedCommands({
     account,
     commands,
@@ -88,11 +109,12 @@ export const cancelAmuletPreapproval = async ({
   account,
   signMessage,
   recordTransaction,
+  sdk,
 }: AmuletPreapprovalActionParams): Promise<ExecutePreparedResponse> => {
-  const { commands, disclosedContracts } = await walletServiceRequest<WalletServiceCommands>(
-    'amulet.preapproval.cancel',
-    { receiver: account.partyId },
-  )
+  const resolved = sdk ?? (await tokenSdk())
+  const [commands, disclosedContracts] = await resolved.amulet.preapproval.command.cancel({
+    parties: { receiver: account.partyId },
+  })
   if (!hasCommands(commands)) {
     return {}
   }
@@ -108,7 +130,7 @@ export const cancelAmuletPreapproval = async ({
     })
   } catch (error) {
     if (isMissingPreapprovalError(error)) {
-      const status = await getAmuletPreapprovalStatus(account.partyId)
+      const status = await getAmuletPreapprovalStatus(account.partyId, resolved)
       if (!status.active && !status.expired) {
         return {}
       }

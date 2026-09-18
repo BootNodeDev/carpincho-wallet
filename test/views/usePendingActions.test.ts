@@ -1,11 +1,13 @@
 import { strict as assert } from 'node:assert'
 import { afterEach, beforeEach, describe, it } from 'node:test'
 import { getToastEntries, toast } from '@/components/ui/toast'
+import { forgetLedgerSessions } from '@/ledger/ledgerApi'
 import {
   CANTON_METHOD_PREPARE_EXECUTE,
   CANTON_METHOD_PREPARE_EXECUTE_AND_WAIT,
 } from '@/provider/methods'
 import type { ProviderResponder } from '@/provider/types'
+import { installLedgerWrites } from '@/test-utils/ledger'
 import type { AccountPublic } from '@/vault/types'
 import type { VaultContextValue } from '@/vault/VaultContext'
 import type { PendingExecuteRequest, PendingSignRequest } from '@/views/home/types'
@@ -97,20 +99,13 @@ const lastToast = (): { variant: string; message: unknown } | undefined => {
   return entries.length === 0 ? undefined : entries[entries.length - 1]
 }
 
-// Routes wallet-service JSON-RPC calls by method name to canned results (or a JSON-RPC error).
-const installWalletService = (
-  handlers: Record<string, { result?: unknown; error?: { code: number; message: string } }>,
-): void => {
-  globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
-    const body = JSON.parse(init?.body ?? '{}') as { method: string }
-    const handler = handlers[body.method]
-    if (handler === undefined) {
-      throw new Error(`unexpected wallet-service method: ${body.method}`)
-    }
-    const payload =
-      handler.error !== undefined ? { error: handler.error } : { result: handler.result }
-    return new Response(JSON.stringify(payload), { status: 200 })
-  }) as typeof globalThis.fetch
+// Serves the participant prepare/execute pair the approved request runs through.
+const installSubmission = (): void => {
+  installLedgerWrites({
+    preparedTransaction: 'ptx',
+    preparedTransactionHash: 'hash-1',
+    executed: { updateId: 'update-1', completionOffset: 7 },
+  })
 }
 
 describe('usePendingActions', () => {
@@ -119,6 +114,8 @@ describe('usePendingActions', () => {
   })
   afterEach(() => {
     globalThis.fetch = originalFetch
+    localStorage.clear()
+    forgetLedgerSessions()
     toast.clear()
   })
 
@@ -196,16 +193,7 @@ describe('usePendingActions', () => {
     })
 
     it('runs the prepare → sign → execute → record pipeline and responds with the tx', async () => {
-      installWalletService({
-        prepareTransaction: {
-          result: {
-            preparedTransaction: 'ptx',
-            preparedTransactionHash: 'hash-1',
-            hashingSchemeVersion: 'HASHING_SCHEME_VERSION_V2',
-          },
-        },
-        executePrepared: { result: { updateId: 'update-1', completionOffset: 7 } },
-      })
+      installSubmission()
       const { responder, results } = makeResponder()
       const recorded: unknown[] = []
       const { args, spies } = makeArgs({
@@ -238,16 +226,7 @@ describe('usePendingActions', () => {
     })
 
     it('responds with null for the prepareExecute (no-wait) method', async () => {
-      installWalletService({
-        prepareTransaction: {
-          result: {
-            preparedTransaction: 'ptx',
-            preparedTransactionHash: 'hash-1',
-            hashingSchemeVersion: 'HASHING_SCHEME_VERSION_V2',
-          },
-        },
-        executePrepared: { result: { updateId: 'update-1', completionOffset: 7 } },
-      })
+      installSubmission()
       const { responder, results } = makeResponder()
       const { args } = makeArgs({
         pendingExecute: executeRequest(responder, CANTON_METHOD_PREPARE_EXECUTE, 'prepareExecute'),
@@ -259,8 +238,8 @@ describe('usePendingActions', () => {
     })
 
     it('surfaces a prepare failure to the dApp and the user', async () => {
-      installWalletService({
-        prepareTransaction: { error: { code: -32000, message: 'participant down' } },
+      installLedgerWrites({
+        onPrepare: () => new Response('participant down', { status: 503 }),
       })
       const { responder, results, errors } = makeResponder()
       const { args, spies } = makeArgs({ pendingExecute: executeRequest(responder) })

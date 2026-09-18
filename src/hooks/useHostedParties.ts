@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/config/queryKeys'
-import { activeRpcUrl } from '@/config/runtimeConfig'
+import { activeGatewayUrl } from '@/config/runtimeConfig'
 import { useRuntimeConfig } from '@/config/useRuntimeConfig'
 import { type HostedPartiesAnswer, hostedPartyIds } from '@/ledger/hostedParties'
 
@@ -17,12 +17,12 @@ export const useHostedParties = (
   networkId: string | undefined,
 ): HostedPartiesAnswer | undefined => {
   const { config } = useRuntimeConfig()
-  const url = activeRpcUrl(config)
+  const url = activeGatewayUrl(config)
   const query = useQuery({
     queryKey: queryKeys.hostedParties(url, networkId, partyIds),
     queryFn: async () => ({
       asked: [...partyIds],
-      hosted: await hostedPartyIds(partyIds, { rpcUrl: url }),
+      hosted: await hostedPartyIds(partyIds, { gatewayUrl: url }),
     }),
     enabled: partyIds.length > 0,
     refetchInterval: RECHECK_MS,

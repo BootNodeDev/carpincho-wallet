@@ -13,6 +13,8 @@ const appVersion = (
   }
 ).version
 ;(globalThis as { __APP_VERSION__?: string }).__APP_VERSION__ = appVersion
+// Tests exercise the built shape, not the dev server, so the proxy is off.
+;(globalThis as { __DEV_PROXY__?: boolean }).__DEV_PROXY__ = false
 
 // Same for __WALLET_ICON_DATA_URL__: mirrored from the PNG the manifest ships.
 const walletIconDataUrl = `data:image/png;base64,${readFileSync(

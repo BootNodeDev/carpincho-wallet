@@ -5,70 +5,76 @@ import {
   listTokenHoldings,
   summarizeTokenHoldings,
   type TokenHolding,
-  type TokenHoldingSummary,
 } from '@/cip56/holdings'
+import { HOLDING_INTERFACE_ID } from '@/ledger/acs'
+import { forgetLedgerSessions } from '@/ledger/ledgerApi'
+import { installAcsReads } from '@/test-utils/ledger'
 
 const originalFetch = globalThis.fetch
 
 describe('CIP-56 holding helpers', () => {
   afterEach(() => {
-    // Restore the global RPC transport after each scenario so other wallet-service tests
-    // keep their own request fixtures isolated.
+    // Restore the global transport after each scenario so other ledger tests keep their
+    // own request fixtures isolated.
     globalThis.fetch = originalFetch
+    localStorage.clear()
+    forgetLedgerSessions()
   })
 
-  it('lists token holdings through wallet-service without reshaping SDK contracts', async () => {
-    // Scenario: wallet-service owns the Node-only SDK call and returns raw-ish
-    // holding contracts. Carpincho should preserve that shape at the API boundary.
-    const holdings: TokenHolding[] = [
+  it('lists token holdings from the holding interface view, not the template payload', async () => {
+    // Scenario: the participant answers an interface-filtered ACS query with a view per
+    // contract. Carpincho should carry that view through unreshaped, whatever template
+    // happens to implement the standard.
+    const view = {
+      owner: 'alice::party',
+      amount: '12.5000000000',
+      instrumentId: { admin: 'dso::party', id: 'Amulet' },
+      lock: null,
+    }
+    const { queries } = installAcsReads([{ contractId: 'holding-cid-1', viewValue: view }])
+
+    const result = await listTokenHoldings('alice::party')
+
+    assert.deepEqual(queries, [{ partyId: 'alice::party', interfaceId: HOLDING_INTERFACE_ID }])
+    assert.deepEqual(result, [{ contractId: 'holding-cid-1', interfaceViewValue: view }])
+  })
+
+  it('totals the holding UTXOs into summaries, since nothing else answers balances now', async () => {
+    // wallet-service could answer this from Scan; the participant cannot, so the summary is
+    // derived from the same UTXO read the detail list uses.
+    const { queries } = installAcsReads([
       {
         contractId: 'holding-cid-1',
-        interfaceViewValue: {
+        viewValue: {
           owner: 'alice::party',
-          amount: '12.5000000000',
+          amount: '12.5',
           instrumentId: { admin: 'dso::party', id: 'Amulet' },
           lock: null,
         },
       },
-    ]
-    const methods: string[] = []
-    globalThis.fetch = async (_input, init) => {
-      const body = JSON.parse(String(init?.body)) as { method: string; params: unknown }
-      methods.push(body.method)
-      assert.deepEqual(body.params, { partyId: 'alice::party' })
-      return new Response(JSON.stringify({ result: holdings }), { status: 200 })
-    }
-
-    const result = await listTokenHoldings('alice::party')
-
-    assert.deepEqual(methods, ['cip56.listHoldings'])
-    assert.deepEqual(result, holdings)
-  })
-
-  it('lists token holding summaries through wallet-service', async () => {
-    // Scenario: wallet-service can return Scan-backed balance summaries without
-    // sending every UTXO to the browser.
-    const summaries: TokenHoldingSummary[] = [
       {
-        key: 'dso::party:Amulet',
-        tokenLabel: 'Amulet',
-        instrumentId: { admin: 'dso::party', id: 'Amulet' },
-        totalAmount: '12.5000000000',
-        source: 'scan',
+        contractId: 'holding-cid-2',
+        viewValue: {
+          owner: 'alice::party',
+          amount: '2.25',
+          instrumentId: { admin: 'dso::party', id: 'Amulet' },
+          lock: null,
+        },
       },
-    ]
-    const methods: string[] = []
-    globalThis.fetch = async (_input, init) => {
-      const body = JSON.parse(String(init?.body)) as { method: string; params: unknown }
-      methods.push(body.method)
-      assert.deepEqual(body.params, { partyId: 'alice::party' })
-      return new Response(JSON.stringify({ result: summaries }), { status: 200 })
-    }
+    ])
 
     const result = await listTokenHoldingSummaries('alice::party')
 
-    assert.deepEqual(methods, ['cip56.listHoldingSummary'])
-    assert.deepEqual(result, summaries)
+    // Both UTXOs were collected across pages: an unpaged read would stop at the participant's
+    // element limit and understate the balance.
+    assert.deepEqual(
+      queries.map((query) => query.pageToken),
+      [undefined, '1'],
+    )
+    assert.equal(result.length, 1)
+    assert.equal(result[0]?.tokenLabel, 'Amulet')
+    assert.equal(result[0]?.totalAmount, '14.75')
+    assert.equal(result[0]?.utxoCount, 2)
   })
 
   it('summarizes holdings by token with decimal totals and lock counts', () => {

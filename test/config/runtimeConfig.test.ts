@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
 import {
-  activeRpcUrl,
+  activeGatewayUrl,
   isEndpointUrl,
   loadRuntimeConfig,
   loadRuntimeConfigAsync,
@@ -48,10 +48,10 @@ describe('runtime config storage', () => {
       activeEndpointId: 'devnet',
     })
 
-    // Expected result: chrome.storage.local receives the whole list under the v3 key.
+    // Expected result: chrome.storage.local receives the whole list under the v4 key.
     assert.deepEqual(writes, [
       {
-        'carpincho.runtime-config.v3': {
+        'carpincho.runtime-config.v4': {
           endpoints: [
             { id: 'local', name: 'Local', url: 'http://localhost:3010/rpc' },
             { id: 'devnet', name: 'Devnet', url: 'http://wallet.example/rpc' },
@@ -60,26 +60,47 @@ describe('runtime config storage', () => {
         },
       },
     ])
-    assert.equal(activeRpcUrl(loadRuntimeConfig()), 'http://wallet.example/rpc')
+    assert.equal(activeGatewayUrl(loadRuntimeConfig()), 'http://wallet.example/rpc')
   })
 
-  it('keeps a v2 single-URL install as its first saved endpoint', () => {
-    // Scenario: an install from before the endpoint list only has the old single-URL key.
+  it('drops a wallet-service install and starts from the default gateway', () => {
+    // Scenario: an install from before the gateway holds only wallet-service RPC urls, which
+    // no gateway answers at, so carrying them over would only save an endpoint that fails.
     localStorage.setItem(
-      'carpincho.runtime-config.v2',
-      JSON.stringify({ walletServiceRpcUrl: 'http://existing.example/rpc' }),
+      'carpincho.runtime-config.v3',
+      JSON.stringify({
+        endpoints: [{ id: 'local', name: 'Local', url: 'http://localhost:3010/rpc' }],
+        activeEndpointId: 'local',
+      }),
     )
     installChromeWrites()
 
     // Action: load the runtime config through the same initializer the popup uses.
     const loaded = loadRuntimeConfig()
 
-    // Expected result: one endpoint named after its host, in use, stored under the new key.
+    // Expected result: the default gateway endpoint, and the stale key is gone for good.
     assert.equal(loaded.endpoints.length, 1)
-    assert.equal(loaded.endpoints[0]?.name, 'existing.example')
-    assert.equal(activeRpcUrl(loaded), 'http://existing.example/rpc')
-    assert.equal(localStorage.getItem('carpincho.runtime-config.v2'), null)
-    assert.equal(loadRuntimeConfig().activeEndpointId, loaded.activeEndpointId)
+    assert.equal(activeGatewayUrl(loaded), 'http://localhost:3030/api/v0/user')
+    assert.equal(localStorage.getItem('carpincho.runtime-config.v3'), null)
+  })
+
+  it('keeps the network id stored on an endpoint', () => {
+    // The network a gateway serves is picked once and has to survive a reload, since nothing
+    // else records which of the gateway's networks the accounts were made against.
+    const config = saveRuntimeConfig({
+      endpoints: [
+        {
+          id: 'local',
+          name: 'Local',
+          url: 'http://localhost:3030/api/v0/user',
+          networkId: 'canton:localnet',
+        },
+      ],
+      activeEndpointId: 'local',
+    })
+
+    assert.equal(config.endpoints[0]?.networkId, 'canton:localnet')
+    assert.equal(loadRuntimeConfig().endpoints[0]?.networkId, 'canton:localnet')
   })
 
   it('drops whitespace from every stored URL, wherever it came from', () => {
@@ -90,7 +111,7 @@ describe('runtime config storage', () => {
       activeEndpointId: 'a',
     })
 
-    assert.equal(activeRpcUrl(loadRuntimeConfig()), 'https://devnet.example/rpc')
+    assert.equal(activeGatewayUrl(loadRuntimeConfig()), 'https://devnet.example/rpc')
   })
 
   it('accepts only http(s) URLs as endpoints', () => {
@@ -111,7 +132,7 @@ describe('runtime config storage', () => {
 
     // Expected result: sanitizing re-points the config at the only endpoint left.
     assert.equal(config.activeEndpointId, 'local')
-    assert.equal(activeRpcUrl(config), 'http://localhost:3010/rpc')
+    assert.equal(activeGatewayUrl(config), 'http://localhost:3010/rpc')
   })
 
   it('reads the endpoint in use from extension storage in a worker', async () => {
@@ -122,7 +143,7 @@ describe('runtime config storage', () => {
         storage: {
           local: {
             get: async () => ({
-              'carpincho.runtime-config.v3': {
+              'carpincho.runtime-config.v4': {
                 endpoints: [
                   { id: 'local', name: 'Local', url: 'http://localhost:3010/rpc' },
                   { id: 'devnet', name: 'Devnet', url: 'http://wallet.example/rpc' },
@@ -137,6 +158,6 @@ describe('runtime config storage', () => {
     })
 
     // Expected result: the worker uses the picked endpoint, not the first one.
-    assert.equal(activeRpcUrl(await loadRuntimeConfigAsync()), 'http://wallet.example/rpc')
+    assert.equal(activeGatewayUrl(await loadRuntimeConfigAsync()), 'http://wallet.example/rpc')
   })
 })

@@ -8,6 +8,16 @@ import {
   listActiveContracts,
   matchesTemplate,
 } from '@/ledger/contracts'
+import { forgetLedgerSessions } from '@/ledger/ledgerApi'
+import {
+  gatewayRpcResponse,
+  installLedgerWrites,
+  submissionCalls,
+  TEST_ACCESS_TOKEN,
+  TEST_LEDGER_BASE_URL,
+  TEST_LEDGER_USER_ID,
+  TEST_SYNCHRONIZER_ID,
+} from '@/test-utils/ledger'
 import type { AccountPublic } from '@/vault/types'
 
 const originalFetch = globalThis.fetch
@@ -25,42 +35,20 @@ const ACCOUNT: AccountPublic = {
 
 describe('ledger contract helpers', () => {
   afterEach(() => {
-    // Each scenario owns the JSON-RPC fake so call ordering stays explicit.
+    // Each scenario owns the fetch fake so call ordering stays explicit.
     globalThis.fetch = originalFetch
     localStorage.clear()
+    forgetLedgerSessions()
   })
 
   it('creates a contract by preparing a CreateCommand and signing with the active account', async () => {
     // Scenario: a developer pastes a template id and JSON payload into Carpincho.
     // The helper must build the ledger CreateCommand, ask wallet-service to prepare it,
     // sign only the prepared hash locally, submit the signature, and record the raw command.
-    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
-    globalThis.fetch = (async (_input, init) => {
-      const body = JSON.parse(String(init?.body)) as {
-        method: string
-        params: Record<string, unknown>
-      }
-      calls.push({ method: body.method, params: body.params })
-      if (body.method === 'prepareTransaction') {
-        return new Response(
-          JSON.stringify({
-            result: {
-              preparedTransaction: 'prepared-create',
-              preparedTransactionHash: 'prepared-create-hash',
-              hashingSchemeVersion: 'HASHING_SCHEME_VERSION_V2',
-            },
-          }),
-          { status: 200 },
-        )
-      }
-      if (body.method === 'executePrepared') {
-        return new Response(
-          JSON.stringify({ result: { updateId: 'update-1', completionOffset: 42 } }),
-          { status: 200 },
-        )
-      }
-      throw new Error(`unexpected method ${body.method}`)
-    }) as typeof globalThis.fetch
+    const { calls } = installLedgerWrites({
+      preparedTransaction: 'prepared-create',
+      preparedTransactionHash: 'prepared-create-hash',
+    })
     const recorded: unknown[] = []
 
     const result = await createContract({
@@ -80,18 +68,34 @@ describe('ledger contract helpers', () => {
 
     assert.deepEqual(result, { updateId: 'update-1', completionOffset: 42 })
     assert.deepEqual(
-      calls.map((call) => call.method),
-      ['prepareTransaction', 'executePrepared'],
+      submissionCalls(calls).map((call) => call.resource),
+      ['/v2/interactive-submission/prepare', '/v2/interactive-submission/executeAndWait'],
     )
-    assert.deepEqual(calls[0]?.params, {
-      partyId: 'alice::party',
-      actAs: ['alice::party'],
-      commands: [
+    const prepare = submissionCalls(calls)[0]?.body
+    assert.equal(prepare?.userId, TEST_LEDGER_USER_ID)
+    assert.equal(prepare?.synchronizerId, TEST_SYNCHRONIZER_ID)
+    assert.deepEqual(prepare?.actAs, ['alice::party'])
+    assert.deepEqual(prepare?.commands, [
+      {
+        CreateCommand: {
+          templateId: 'pkg:Module:Template',
+          createArguments: { admin: 'alice::party' },
+        },
+      },
+    ])
+    // The party's own namespace fingerprint is what authorizes the submission.
+    assert.deepEqual(submissionCalls(calls)[1]?.body?.partySignatures, {
+      signatures: [
         {
-          CreateCommand: {
-            templateId: 'pkg:Module:Template',
-            createArguments: { admin: 'alice::party' },
-          },
+          party: 'alice::party',
+          signatures: [
+            {
+              signature: 'signature-base64',
+              signedBy: 'party',
+              format: 'SIGNATURE_FORMAT_CONCAT',
+              signingAlgorithmSpec: 'SIGNING_ALGORITHM_SPEC_ED25519',
+            },
+          ],
         },
       ],
     })
@@ -102,33 +106,11 @@ describe('ledger contract helpers', () => {
     // Scenario: a developer has a contract id and a raw DAML choice argument.
     // The helper should build exactly one ExerciseCommand, keep signing local, submit it,
     // and preserve the original command in activity history for audit.
-    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
-    globalThis.fetch = (async (_input, init) => {
-      const body = JSON.parse(String(init?.body)) as {
-        method: string
-        params: Record<string, unknown>
-      }
-      calls.push({ method: body.method, params: body.params })
-      if (body.method === 'prepareTransaction') {
-        return new Response(
-          JSON.stringify({
-            result: {
-              preparedTransaction: 'prepared-exercise',
-              preparedTransactionHash: 'prepared-exercise-hash',
-              hashingSchemeVersion: 'HASHING_SCHEME_VERSION_V2',
-            },
-          }),
-          { status: 200 },
-        )
-      }
-      if (body.method === 'executePrepared') {
-        return new Response(
-          JSON.stringify({ result: { updateId: 'exercise-update-1', completionOffset: 43 } }),
-          { status: 200 },
-        )
-      }
-      throw new Error(`unexpected method ${body.method}`)
-    }) as typeof globalThis.fetch
+    const { calls } = installLedgerWrites({
+      preparedTransaction: 'prepared-exercise',
+      preparedTransactionHash: 'prepared-exercise-hash',
+      executed: { updateId: 'exercise-update-1', completionOffset: 43 },
+    })
     const recorded: unknown[] = []
 
     const result = await exerciseContract({
@@ -150,30 +132,26 @@ describe('ledger contract helpers', () => {
 
     assert.deepEqual(result, { updateId: 'exercise-update-1', completionOffset: 43 })
     assert.deepEqual(
-      calls.map((call) => call.method),
-      ['prepareTransaction', 'executePrepared'],
+      submissionCalls(calls).map((call) => call.resource),
+      ['/v2/interactive-submission/prepare', '/v2/interactive-submission/executeAndWait'],
     )
-    assert.deepEqual(calls[0]?.params, {
-      partyId: 'alice::party',
-      actAs: ['alice::party'],
-      commands: [
-        {
-          ExerciseCommand: {
-            templateId: 'pkg:Module:Template',
-            contractId: 'cid-1',
-            choice: 'Template_DoThing',
-            choiceArgument: { receiver: 'bob::party', amount: '5.0' },
-          },
+    assert.deepEqual(submissionCalls(calls)[0]?.body?.commands, [
+      {
+        ExerciseCommand: {
+          templateId: 'pkg:Module:Template',
+          contractId: 'cid-1',
+          choice: 'Template_DoThing',
+          choiceArgument: { receiver: 'bob::party', amount: '5.0' },
         },
-      ],
-    })
+      },
+    ])
     assert.equal(
       (recorded[0] as { method?: string } | undefined)?.method,
       'ledger.contract.exercise',
     )
   })
 
-  it('lists active contracts for a party through the wallet-service ledgerApi proxy', async () => {
+  it('lists active contracts for a party straight from the participant JSON API', async () => {
     // Scenario: the Contracts tab shows the active ledger state for the selected party.
     // The helper should request ACS from JSON API v2 and preserve contract ids, template ids,
     // create arguments, and offsets so the UI can inspect the exact ledger payload.
@@ -191,19 +169,35 @@ describe('ledger contract helpers', () => {
         createdOffset: 42,
       },
     ]
-    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
-    globalThis.fetch = (async (_input, init) => {
-      const body = JSON.parse(String(init?.body)) as {
-        method: string
-        params: Record<string, unknown>
+    const calls: Array<{
+      requestMethod: string
+      resource: string
+      body?: Record<string, unknown>
+      authorization?: string
+    }> = []
+    globalThis.fetch = (async (input, init) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes('/api/v0/user')) {
+        const rpc = JSON.parse(String(init?.body ?? '{}')) as { method?: string }
+        return gatewayRpcResponse(rpc.method ?? '') ?? new Response('unexpected', { status: 500 })
       }
-      calls.push({ method: body.method, params: body.params })
+      const headers = new Headers(init?.headers)
+      calls.push({
+        requestMethod: String(init?.method).toLowerCase(),
+        resource: url.replace(TEST_LEDGER_BASE_URL, ''),
+        ...(init?.body === undefined
+          ? {}
+          : { body: JSON.parse(String(init.body)) as Record<string, unknown> }),
+        ...(headers.get('authorization') === null
+          ? {}
+          : { authorization: headers.get('authorization') as string }),
+      })
       if (calls.length === 1) {
-        return new Response(JSON.stringify({ result: { offset: 99 } }), { status: 200 })
+        return new Response(JSON.stringify({ offset: 99 }), { status: 200 })
       }
       return new Response(
-        JSON.stringify({
-          result: contracts.map((contract) => ({
+        JSON.stringify(
+          contracts.map((contract) => ({
             contractEntry: {
               JsActiveContract: {
                 createdEvent: {
@@ -215,7 +209,7 @@ describe('ledger contract helpers', () => {
               },
             },
           })),
-        }),
+        ),
         { status: 200 },
       )
     }) as typeof globalThis.fetch
@@ -227,38 +221,34 @@ describe('ledger contract helpers', () => {
     assert.deepEqual(result, contracts)
     assert.deepEqual(calls, [
       {
-        method: 'ledgerApi',
-        params: {
-          requestMethod: 'get',
-          resource: '/v2/state/ledger-end',
-        },
+        requestMethod: 'get',
+        resource: '/v2/state/ledger-end',
+        authorization: `Bearer ${TEST_ACCESS_TOKEN}`,
       },
       {
-        method: 'ledgerApi',
-        params: {
-          requestMethod: 'post',
-          resource: '/v2/state/active-contracts',
-          body: {
-            filter: {
-              filtersByParty: {
-                'alice::party': {
-                  cumulative: [
-                    {
-                      identifierFilter: {
-                        WildcardFilter: {
-                          value: {
-                            includeCreatedEventBlob: false,
-                          },
+        requestMethod: 'post',
+        resource: '/v2/state/active-contracts',
+        authorization: `Bearer ${TEST_ACCESS_TOKEN}`,
+        body: {
+          filter: {
+            filtersByParty: {
+              'alice::party': {
+                cumulative: [
+                  {
+                    identifierFilter: {
+                      WildcardFilter: {
+                        value: {
+                          includeCreatedEventBlob: false,
                         },
                       },
                     },
-                  ],
-                },
+                  },
+                ],
               },
             },
-            activeAtOffset: 99,
-            verbose: true,
           },
+          activeAtOffset: 99,
+          verbose: true,
         },
       },
     ])

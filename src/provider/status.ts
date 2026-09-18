@@ -1,4 +1,4 @@
-import { getWalletServiceNetworkId, walletServiceStatus } from '@/api/walletService'
+import { activeNetworkId, type LedgerStatus, ledgerStatus } from '@/ledger/status'
 import { SIGNING_PROVIDER_ID } from '@/provider/accounts'
 
 export interface ProviderStatus {
@@ -20,9 +20,10 @@ const walletUserUrl = (): string | undefined => {
   return typeof window === 'undefined' ? undefined : `${window.location.origin}/`
 }
 
-// Builds the browser provider status from wallet-service without inventing a local network.
-// Local connection state must not depend on network discovery, so an unreachable
-// wallet-service degrades to "not network connected" rather than failing connect.
+// Builds the browser provider status from the gateway and the participant it names, without
+// inventing a local network. Local connection state must not depend on network discovery, so
+// an unreachable gateway or participant degrades to "not network connected" rather than
+// failing connect.
 export const buildStatus = async (): Promise<ProviderStatus> => {
   const userUrl = walletUserUrl()
   const provider = {
@@ -31,33 +32,25 @@ export const buildStatus = async (): Promise<ProviderStatus> => {
     providerType: 'browser' as const,
     ...(userUrl === undefined ? {} : { userUrl }),
   }
-  try {
-    const remote = await walletServiceStatus()
-    const networkId = remote.network?.networkId?.trim()
-    return {
-      provider,
-      connection: {
-        isConnected: true,
-        isNetworkConnected: remote.connection?.isNetworkConnected ?? false,
-        ...(remote.connection?.networkReason === undefined
-          ? {}
-          : { networkReason: remote.connection.networkReason }),
-      },
-      ...(networkId === undefined || networkId === '' ? {} : { network: { networkId } }),
-    }
-  } catch (error) {
-    return {
-      provider,
-      connection: {
-        isConnected: true,
-        isNetworkConnected: false,
-        networkReason: `wallet-service unavailable: ${(error as Error).message}`,
-      },
-    }
+  // An unreachable gateway throws out of `ledgerStatus`, and connect must survive that: the
+  // wallet is still connected to the dApp, it just cannot say which network it is on.
+  const status: LedgerStatus = await ledgerStatus().catch((error: unknown) => ({
+    connected: false,
+    reason: `canton unavailable: ${(error as Error).message}`,
+  }))
+  const networkId = status.networkId?.trim()
+  return {
+    provider,
+    connection: {
+      isConnected: true,
+      isNetworkConnected: status.connected,
+      ...(status.reason === undefined ? {} : { networkReason: status.reason }),
+    },
+    ...(networkId === undefined || networkId === '' ? {} : { network: { networkId } }),
   }
 }
 
-// Resolves getActiveNetwork through wallet-service status, matching wallet-gateway's source.
+// Resolves getActiveNetwork through the gateway, which is the only thing that names a network.
 export const getActiveNetwork = async (): Promise<{ networkId: string }> => ({
-  networkId: await getWalletServiceNetworkId(),
+  networkId: await activeNetworkId(),
 })
