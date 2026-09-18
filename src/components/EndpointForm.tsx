@@ -2,11 +2,7 @@ import { useId, useState } from 'react'
 import { GhostButton, PrimaryButton } from '@/components/ui/Button'
 import { ALERT_CIRCLE_ICON, ALERT_TRIANGLE_ICON, SPINNER_ICON } from '@/components/ui/icons'
 import { TextInput } from '@/components/ui/TextInput'
-import {
-  isEndpointUrl,
-  normalizeEndpointUrl,
-  type WalletServiceEndpoint,
-} from '@/config/runtimeConfig'
+import { type GatewayEndpoint, isEndpointUrl, normalizeEndpointUrl } from '@/config/runtimeConfig'
 import { useWalletServiceTest, type WalletServiceTestState } from '@/hooks/useWalletServiceTest'
 import { cn } from '@/utils/cn'
 import { displayNetworkId } from '@/utils/network'
@@ -33,13 +29,13 @@ const RESULT: Record<
   unreachable: (reason) => ({
     mark: ALERT_CIRCLE_ICON,
     tone: 'text-danger',
-    text: reason ?? "Can't reach wallet-service",
+    text: reason ?? "Can't reach the gateway",
   }),
 }
 
 interface EndpointFormProps {
   // Omitted when adding a new endpoint.
-  endpoint?: WalletServiceEndpoint
+  endpoint?: GatewayEndpoint
   submitLabel: string
   onSubmit: (values: { name: string; url: string }) => void
 }
@@ -87,7 +83,7 @@ export const EndpointForm = ({
 
       <div>
         <div className="flex items-baseline justify-between gap-3">
-          <label htmlFor={urlId}>RPC URL</label>
+          <label htmlFor={urlId}>Gateway URL</label>
           <GhostButton
             data-testid="endpoint-test"
             onClick={() => {

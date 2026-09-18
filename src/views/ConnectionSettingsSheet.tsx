@@ -6,7 +6,7 @@ import { DangerConfirm } from '@/components/ui/DangerConfirm'
 import { SectionLabel } from '@/components/ui/SectionLabel'
 import { Sheet } from '@/components/ui/Sheet'
 import { toast } from '@/components/ui/toast'
-import { newEndpointId, type WalletServiceEndpoint } from '@/config/runtimeConfig'
+import { type GatewayEndpoint, newEndpointId } from '@/config/runtimeConfig'
 import { useRuntimeConfig } from '@/config/useRuntimeConfig'
 import { useEndpointReachability } from '@/hooks/useEndpointReachability'
 
@@ -22,8 +22,8 @@ export const ConnectionSettingsSheet = ({
   onOpenChange,
 }: ConnectionSettingsSheetProps): JSX.Element => {
   const { config, saveConfig } = useRuntimeConfig()
-  const [editing, setEditing] = useState<WalletServiceEndpoint | 'new' | null>(null)
-  const [removeTarget, setRemoveTarget] = useState<WalletServiceEndpoint | null>(null)
+  const [editing, setEditing] = useState<GatewayEndpoint | 'new' | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<GatewayEndpoint | null>(null)
   const reachability = useEndpointReachability(config.endpoints)
 
   const handleOpenChange = (next: boolean): void => {
@@ -35,7 +35,7 @@ export const ConnectionSettingsSheet = ({
   }
 
   // Picking a row is the whole switch, so the sheet has nothing left to do either way.
-  const onSelect = (endpoint: WalletServiceEndpoint): void => {
+  const onSelect = (endpoint: GatewayEndpoint): void => {
     if (endpoint.id !== config.activeEndpointId) {
       saveConfig({ ...config, activeEndpointId: endpoint.id })
       toast.success(`Now using ${endpoint.name}`)
@@ -81,14 +81,14 @@ export const ConnectionSettingsSheet = ({
         title={editing === null ? 'Connection' : editing === 'new' ? 'Add endpoint' : editing.name}
         description={
           editing === null
-            ? 'Pick, add, edit or remove wallet-service endpoints.'
-            : 'Name the endpoint and test its RPC URL.'
+            ? 'Pick, add, edit or remove Wallet Gateway endpoints.'
+            : 'Name the endpoint and test its gateway URL.'
         }
         onBack={editing === null ? undefined : () => setEditing(null)}
       >
         {editing === null ? (
           <div className="flex flex-col gap-2">
-            <SectionLabel>Wallet-service endpoints</SectionLabel>
+            <SectionLabel>Gateway endpoints</SectionLabel>
             {config.endpoints.map((endpoint) => (
               <EndpointListRow
                 key={endpoint.id}
@@ -126,7 +126,7 @@ export const ConnectionSettingsSheet = ({
         testId="endpoint-remove-sheet"
         side="center"
         title={`Remove ${removeTarget?.name ?? 'endpoint'}?`}
-        description="Confirm removing this wallet-service endpoint."
+        description="Confirm removing this gateway endpoint."
       >
         <DangerConfirm
           testId="remove-endpoint"

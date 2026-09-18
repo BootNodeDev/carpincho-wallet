@@ -2,22 +2,15 @@ import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { forgetLedgerSessions } from '@/ledger/ledgerApi'
+import { installLedgerStatus } from '@/test-utils/ledger'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import { ConfigureRpcStep } from '@/views/onboarding/ConfigureRpcStep'
 
 const originalFetch = globalThis.fetch
 
 const respondConnected = (): void => {
-  globalThis.fetch = async () =>
-    new Response(
-      JSON.stringify({
-        result: {
-          connection: { isNetworkConnected: true },
-          network: { networkId: 'canton:local' },
-        },
-      }),
-      { status: 200 },
-    )
+  installLedgerStatus({ networkId: 'canton:local' })
 }
 
 const continueButton = (): HTMLButtonElement =>
@@ -28,9 +21,10 @@ describe('ConfigureRpcStep', () => {
     cleanup()
     localStorage.clear()
     globalThis.fetch = originalFetch
+    forgetLedgerSessions()
   })
 
-  it('enables Continue once the wallet-service is reachable', async () => {
+  it('enables Continue once the gateway is reachable', async () => {
     respondConnected()
     render(<ConfigureRpcStep onConfirmed={() => undefined} />, {
       wrapper: TestQueryClientProvider,
@@ -55,7 +49,7 @@ describe('ConfigureRpcStep', () => {
     await waitFor(() => assert.equal(continueButton().disabled, false))
     await userEvent.click(continueButton())
     assert.equal(confirmed, true)
-    assert.match(localStorage.getItem('carpincho.runtime-config.v3') ?? '', /localhost:3010/)
+    assert.match(localStorage.getItem('carpincho.runtime-config.v4') ?? '', /localhost:3030/)
   })
 
   it('keeps Continue disabled with a reason when unreachable and shows no Test button', async () => {
@@ -66,7 +60,7 @@ describe('ConfigureRpcStep', () => {
       wrapper: TestQueryClientProvider,
     })
     await waitFor(() => {
-      assert.ok(screen.getByText(/can.t reach wallet-service/i))
+      assert.ok(screen.getByText(/can.t reach the gateway/i))
       assert.equal(continueButton().disabled, true)
     })
     assert.equal(screen.queryByRole('button', { name: /^test$/i }), null)
@@ -78,32 +72,29 @@ describe('ConfigureRpcStep', () => {
       wrapper: TestQueryClientProvider,
     })
     await waitFor(() => assert.equal(continueButton().disabled, false))
-    await userEvent.type(screen.getByLabelText(/wallet-service rpc url/i), 'x')
+    await userEvent.type(screen.getByLabelText(/wallet gateway url/i), 'x')
     assert.equal(continueButton().disabled, true)
   })
 
-  it('auto-recovers and enables Continue once wallet-service comes up', async () => {
+  it('auto-recovers and enables Continue once the gateway comes up', async () => {
     let reachable = false
-    globalThis.fetch = async () => {
-      if (!reachable) throw new Error('Failed to fetch')
-      return new Response(
-        JSON.stringify({
-          result: {
-            connection: { isNetworkConnected: true },
-            network: { networkId: 'canton:local' },
-          },
-        }),
-        { status: 200 },
-      )
+    installLedgerStatus({ networkId: 'canton:local' })
+    const answering = globalThis.fetch
+    globalThis.fetch = async (input, init) => {
+      if (!reachable) {
+        throw new Error('Failed to fetch')
+      }
+      return await answering(input, init)
     }
     render(<ConfigureRpcStep onConfirmed={() => undefined} />, {
       wrapper: TestQueryClientProvider,
     })
-    await waitFor(() => assert.ok(screen.getByText(/can.t reach wallet-service/i)), {
+    await waitFor(() => assert.ok(screen.getByText(/can.t reach the gateway/i)), {
       timeout: 2000,
     })
     assert.equal(continueButton().disabled, true)
     reachable = true
+    forgetLedgerSessions()
     await waitFor(() => assert.equal(continueButton().disabled, false), { timeout: 5000 })
   })
 })

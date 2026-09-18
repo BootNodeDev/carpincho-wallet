@@ -3,26 +3,19 @@ import { afterEach, describe, it } from 'node:test'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { getToastEntries, toast } from '@/components/ui/toast'
-import { activeRpcUrl, loadRuntimeConfig, saveRuntimeConfig } from '@/config/runtimeConfig'
+import { activeGatewayUrl, loadRuntimeConfig, saveRuntimeConfig } from '@/config/runtimeConfig'
+import { forgetLedgerSessions } from '@/ledger/ledgerApi'
+import { installLedgerStatus } from '@/test-utils/ledger'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import { ConnectionSettingsSheet } from '@/views/ConnectionSettingsSheet'
 
 const originalFetch = globalThis.fetch
 
-const LOCAL = { id: 'local', name: 'Local', url: 'http://localhost:3010/rpc' }
+const LOCAL = { id: 'local', name: 'Local', url: 'http://localhost:3030/api/v0/user' }
 const DEVNET = { id: 'devnet', name: 'Devnet', url: 'http://devnet.example/rpc' }
 
 const respond = (connected: boolean): void => {
-  globalThis.fetch = (async () =>
-    new Response(
-      JSON.stringify({
-        result: {
-          connection: { isNetworkConnected: connected, networkReason: 'not connected' },
-          network: { networkId: 'canton:local' },
-        },
-      }),
-      { status: 200 },
-    )) as typeof globalThis.fetch
+  installLedgerStatus({ networkId: 'canton:local', participant: connected ? 'up' : 'down' })
 }
 
 const openSheet = (): { openChanges: boolean[] } => {
@@ -55,6 +48,7 @@ describe('ConnectionSettingsSheet', () => {
     toast.clear()
     localStorage.clear()
     globalThis.fetch = originalFetch
+    forgetLedgerSessions()
   })
 
   it('lists the saved endpoints and marks the one in use', () => {
@@ -77,7 +71,7 @@ describe('ConnectionSettingsSheet', () => {
 
     await userEvent.click(rowButton('endpoint-item', 'Devnet'))
 
-    assert.equal(activeRpcUrl(loadRuntimeConfig()), 'http://devnet.example/rpc')
+    assert.equal(activeGatewayUrl(loadRuntimeConfig()), 'http://devnet.example/rpc')
     assert.ok(openChanges.includes(false))
   })
 
@@ -88,7 +82,7 @@ describe('ConnectionSettingsSheet', () => {
 
     await userEvent.click(rowButton('endpoint-item', 'Devnet'))
 
-    assert.equal(activeRpcUrl(loadRuntimeConfig()), 'http://devnet.example/rpc')
+    assert.equal(activeGatewayUrl(loadRuntimeConfig()), 'http://devnet.example/rpc')
     assert.equal(getToastEntries().length, 0)
     assert.ok(openChanges.includes(false))
   })

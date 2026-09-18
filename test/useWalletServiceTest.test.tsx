@@ -2,6 +2,8 @@ import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { useWalletServiceTest } from '@/hooks/useWalletServiceTest'
+import { forgetLedgerSessions } from '@/ledger/ledgerApi'
+import { installLedgerStatus } from '@/test-utils/ledger'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
 
 const originalFetch = globalThis.fetch
@@ -10,18 +12,15 @@ const originalFetch = globalThis.fetch
 // publishes mutation state through its own batched notify, so the awaited promise can win the
 // race and leave the hook still reading `idle`. Assert through waitFor, not on the next line.
 
-const respond = (result: unknown): void => {
-  globalThis.fetch = async () => new Response(JSON.stringify({ result }), { status: 200 })
-}
-
 describe('useWalletServiceTest', () => {
   afterEach(() => {
     cleanup()
     globalThis.fetch = originalFetch
+    forgetLedgerSessions()
   })
 
   it('maps a connected status to connected with the network id', async () => {
-    respond({ connection: { isNetworkConnected: true }, network: { networkId: 'canton:local' } })
+    installLedgerStatus({ networkId: 'canton:local' })
     const { result } = renderHook(() => useWalletServiceTest(), {
       wrapper: TestQueryClientProvider,
     })
@@ -33,8 +32,8 @@ describe('useWalletServiceTest', () => {
     assert.equal(result.current.testedUrl, 'http://host/rpc')
   })
 
-  it('maps a responded-but-not-connected status to not-connected with the reason', async () => {
-    respond({ connection: { isNetworkConnected: false, networkReason: 'syncing' } })
+  it('maps a gateway that answers while the participant does not to not-connected', async () => {
+    installLedgerStatus({ networkId: 'canton:local', participant: 'down' })
     const { result } = renderHook(() => useWalletServiceTest(), {
       wrapper: TestQueryClientProvider,
     })
@@ -42,7 +41,7 @@ describe('useWalletServiceTest', () => {
       await result.current.test('http://host/rpc')
     })
     await waitFor(() => assert.equal(result.current.state, 'not-connected'))
-    assert.equal(result.current.reason, 'syncing')
+    assert.match(result.current.reason ?? '', /fetch failed/)
     assert.equal(result.current.testedUrl, 'http://host/rpc')
   })
 
@@ -66,45 +65,27 @@ describe('useWalletServiceTest', () => {
     const firstResponse = new Promise<Response>((resolve) => {
       resolveFirst = resolve
     })
-    let call = 0
-    globalThis.fetch = (async () => {
-      call += 1
-      if (call === 1) {
-        return await firstResponse
-      }
-      return new Response(
-        JSON.stringify({
-          result: {
-            connection: { isNetworkConnected: true },
-            network: { networkId: 'canton:local' },
-          },
-        }),
-        { status: 200 },
-      )
+    installLedgerStatus({ networkId: 'canton:local' })
+    const answering = globalThis.fetch
+    globalThis.fetch = (async (input, init) => {
+      const url = String(input instanceof Request ? input.url : input)
+      // The stale gateway hangs until the test releases it; everything else answers at once.
+      return url.startsWith('http://stale/') ? await firstResponse : await answering(input, init)
     }) as typeof fetch
 
     const { result } = renderHook(() => useWalletServiceTest(), {
       wrapper: TestQueryClientProvider,
     })
     await act(async () => {
-      const stale = result.current.test('http://stale/rpc')
-      const fresh = result.current.test('http://fresh/rpc')
+      const stale = result.current.test('http://stale/api/v0/user')
+      const fresh = result.current.test('http://fresh/api/v0/user')
       await fresh
-      resolveFirst(
-        new Response(
-          JSON.stringify({
-            result: { connection: { isNetworkConnected: false, networkReason: 'old' } },
-          }),
-          {
-            status: 200,
-          },
-        ),
-      )
+      resolveFirst(new Response('gone', { status: 500 }))
       await stale
     })
 
     await waitFor(() => assert.equal(result.current.state, 'connected'))
     assert.equal(result.current.networkId, 'canton:local')
-    assert.equal(result.current.testedUrl, 'http://fresh/rpc')
+    assert.equal(result.current.testedUrl, 'http://fresh/api/v0/user')
   })
 })

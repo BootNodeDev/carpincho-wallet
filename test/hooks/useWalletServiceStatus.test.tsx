@@ -3,12 +3,14 @@ import { afterEach, describe, it } from 'node:test'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { saveRuntimeConfig } from '@/config/runtimeConfig'
 import { useWalletServiceStatus } from '@/hooks/useWalletServiceStatus'
+import { forgetLedgerSessions } from '@/ledger/ledgerApi'
+import { installLedgerStatus } from '@/test-utils/ledger'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
 
 const originalFetch = globalThis.fetch
 
-const DEFAULT_RPC_URL = 'http://localhost:3010/rpc'
-const OTHER_RPC_URL = 'http://localhost:4010/rpc'
+const DEFAULT_GATEWAY_URL = 'http://localhost:3030/api/v0/user'
+const OTHER_GATEWAY_URL = 'http://localhost:4030/api/v0/user'
 
 // Renders each field separately so a test can assert one without matching on the others.
 const StatusProbe = ({ pollMs = null }: { pollMs?: number | null }): JSX.Element => {
@@ -33,48 +35,27 @@ const renderProbe = (pollMs: number | null = null): void => {
   )
 }
 
-const statusResponse = (connected: boolean, networkId?: string): Response =>
-  new Response(
-    JSON.stringify({
-      result: {
-        connection: { isNetworkConnected: connected },
-        ...(networkId === undefined ? {} : { network: { networkId } }),
-      },
-    }),
-    { status: 200 },
-  )
-
-// Installs a fake wallet-service status response for one test scenario.
-const installStatusResponse = (connected: boolean, networkId = 'canton:local'): void => {
-  globalThis.fetch = async (input) => {
-    // The hook should probe the configured JSON-RPC endpoint with the status method.
-    assert.equal(String(input), DEFAULT_RPC_URL)
-    return statusResponse(connected, networkId)
-  }
-}
-
 describe('useWalletServiceStatus', () => {
   afterEach(() => {
     cleanup()
     globalThis.fetch = originalFetch
     localStorage.clear()
+    forgetLedgerSessions()
   })
 
-  it('marks Canton connected when wallet-service reports network connectivity', async () => {
-    // Scenario: wallet-service responds and says Canton network connectivity is healthy.
-    installStatusResponse(true)
+  it('marks Canton connected when the participant the gateway names answers', async () => {
+    installLedgerStatus({ networkId: 'canton:local' })
 
     renderProbe()
 
-    // The footer state should become connected and expose the wallet-service network id.
     await waitFor(() => assert.equal(field('network'), 'canton:local'))
     assert.equal(field('connected'), 'connected')
   })
 
-  it('marks Canton not connected when wallet-service reports no network connectivity', async () => {
-    // Scenario: wallet-service is reachable but reports that Canton itself is disconnected.
-    // It still names the network, which is what scopes accounts.
-    installStatusResponse(false)
+  it('marks Canton not connected, but still names the network, when only the gateway answers', async () => {
+    // The endpoint is right and Canton is down. The network id is what scopes accounts, so it
+    // has to survive a participant that cannot be reached.
+    installLedgerStatus({ networkId: 'canton:local', participant: 'down' })
 
     renderProbe()
 
@@ -82,21 +63,22 @@ describe('useWalletServiceStatus', () => {
     assert.equal(field('connected'), 'not connected')
   })
 
-  it('trims the reported network id, so it matches the one stored on accounts', async () => {
-    installStatusResponse(true, '  canton:local  ')
+  it('trims the network id the gateway reports, so it matches the one stored on accounts', async () => {
+    installLedgerStatus({ networkId: '  canton:local  ' })
 
     renderProbe()
 
     await waitFor(() => assert.equal(field('network'), 'canton:local'))
   })
 
-  it('treats a blank network id as no network at all', async () => {
+  it('refuses a gateway network with a blank id rather than scoping accounts under one', async () => {
     // '' must not become a scope key of its own: it would match no account and empty the wallet.
-    installStatusResponse(true, '   ')
+    installLedgerStatus({ networkId: '   ' })
 
     renderProbe()
 
-    await waitFor(() => assert.equal(field('connected'), 'connected'))
+    await waitFor(() => assert.match(field('reason'), /no id/))
+    assert.equal(field('connected'), 'not connected')
     assert.equal(field('network'), '-')
   })
 
@@ -104,41 +86,41 @@ describe('useWalletServiceStatus', () => {
     // A failed poll says the endpoint did not answer, not that it moved network. Dropping the
     // id would un-scope the whole vault for one interval.
     let fail = false
-    globalThis.fetch = async () => {
+    const restore = installLedgerStatus({ networkId: 'canton:local' })
+    const withGateway = globalThis.fetch
+    globalThis.fetch = async (input, init) => {
       if (fail) {
         throw new Error('connection refused')
       }
-      return statusResponse(true, 'canton:local')
+      return await withGateway(input, init)
     }
 
     renderProbe(20)
     await waitFor(() => assert.equal(field('network'), 'canton:local'))
 
     fail = true
+    forgetLedgerSessions()
     await waitFor(() => assert.equal(field('reason'), 'connection refused'))
     assert.equal(field('connected'), 'not connected')
     assert.equal(field('network'), 'canton:local')
+    restore()
   })
 
   it('drops the previous network as soon as the endpoint in use changes', async () => {
     // The old answer describes an endpoint that is no longer in use, so it must not scope
     // accounts for the new one while its first probe is still in flight.
-    globalThis.fetch = async (input) =>
-      String(input) === DEFAULT_RPC_URL
-        ? statusResponse(true, 'canton:local')
-        : await new Promise<Response>(() => undefined)
+    installLedgerStatus({ gatewayUrl: DEFAULT_GATEWAY_URL, networkId: 'canton:local' })
 
     renderProbe()
     await waitFor(() => assert.equal(field('network'), 'canton:local'))
 
     act(() => {
       saveRuntimeConfig({
-        endpoints: [{ id: 'other', name: 'Other', url: OTHER_RPC_URL }],
+        endpoints: [{ id: 'other', name: 'Other', url: OTHER_GATEWAY_URL }],
         activeEndpointId: 'other',
       })
     })
 
-    assert.equal(field('network'), '-')
-    assert.equal(field('connected'), 'not connected')
+    await waitFor(() => assert.equal(field('network'), '-'))
   })
 })

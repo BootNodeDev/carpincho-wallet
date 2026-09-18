@@ -1,5 +1,4 @@
-import type { WalletServiceRequestOptions } from '@/api/walletService'
-import { ledgerApi } from '@/ledger/ledgerApi'
+import { type LedgerRequestOptions, ledgerApi } from '@/ledger/ledgerApi'
 
 interface PartyDetailsResponse {
   partyDetails?: { party?: string; isLocal?: boolean }[]
@@ -27,7 +26,7 @@ export const isHostedInResponse = (partyId: string, response: PartyDetailsRespon
 // the caller with "not known" rather than a half-list that hides accounts.
 export const hostedPartyIds = async (
   partyIds: readonly string[],
-  options?: WalletServiceRequestOptions,
+  options?: LedgerRequestOptions,
 ): Promise<string[]> => {
   const results = await Promise.all(
     partyIds.map(async (partyId) => {

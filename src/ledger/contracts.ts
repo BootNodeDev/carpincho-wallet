@@ -1,4 +1,5 @@
 import { type ExecutePreparedResponse, executePreparedCommands } from '@/api/interactiveSubmission'
+import { ledgerEnd } from '@/ledger/acs'
 import { ledgerApi } from '@/ledger/ledgerApi'
 import type { AccountPublic } from '@/vault/types'
 import type { VaultContextValue } from '@/vault/VaultContext'
@@ -32,10 +33,6 @@ export interface ListActiveContractsParams {
   partyId: string
 }
 
-interface LedgerEndResponse {
-  offset?: number
-}
-
 type JsonActiveContractEntry = {
   contractEntry?: {
     JsActiveContract?: {
@@ -52,7 +49,7 @@ type JsonActiveContractEntry = {
 const CREATE_COMMAND_KIND = 'CreateCommand'
 const EXERCISE_COMMAND_KIND = 'ExerciseCommand'
 
-// Builds the JSON Ledger API command shape expected by wallet-service prepareTransaction.
+// Builds the JSON Ledger API command shape interactive submission prepares.
 export const createCommand = (
   templateId: string,
   createArguments: Record<string, unknown>,
@@ -123,18 +120,6 @@ export const exerciseContract = async ({
     signMessage,
     recordTransaction,
   })
-
-// Reads the current ledger end because active-contract queries require an explicit snapshot offset.
-const ledgerEnd = async (): Promise<number> => {
-  const response = await ledgerApi<LedgerEndResponse>({
-    requestMethod: 'get',
-    resource: '/v2/state/ledger-end',
-  })
-  if (typeof response.offset !== 'number') {
-    throw new Error('ledger end response did not include numeric offset')
-  }
-  return response.offset
-}
 
 // Uses wildcard ACS because participant filters expect package names, while commands often use hashes.
 const activeContractFilter = (): Record<string, unknown> => ({

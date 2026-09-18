@@ -1,13 +1,13 @@
 import type { Dispatch, SetStateAction } from 'react'
-import { walletServiceRequest } from '@/api/walletService'
+import { executePreparedCommands } from '@/api/interactiveSubmission'
 import { toast } from '@/components/ui/toast'
 import { broadcastWalletEvent } from '@/extension/eventBroadcast'
 import { dispatchProviderRequest } from '@/provider/dispatch'
 import { CANTON_METHOD_CONNECT, CANTON_METHOD_PREPARE_EXECUTE } from '@/provider/methods'
 import type { VaultContextValue } from '@/vault/VaultContext'
 import {
-  commandCount,
   commandSummary,
+  disclosedContracts,
   optionalString,
   transactionCommands,
 } from '@/views/home/transactionSummary'
@@ -17,22 +17,6 @@ import type {
   PendingSignRequest,
 } from '@/views/home/types'
 import { approveProposal, type ProposalEvent, rejectProposal } from '@/wc/client'
-
-interface PreparedTransactionResponse {
-  preparedTransaction: string
-  preparedTransactionHash: string
-  hashingSchemeVersion:
-    | 'HASHING_SCHEME_VERSION_UNSPECIFIED'
-    | 'HASHING_SCHEME_VERSION_V2'
-    | 'HASHING_SCHEME_VERSION_V3'
-  hashingDetails?: string
-  costEstimation?: unknown
-}
-
-interface ExecutePreparedResponse {
-  updateId?: string
-  completionOffset?: number
-}
 
 interface PendingActionsArgs {
   vault: VaultContextValue
@@ -183,45 +167,24 @@ export const usePendingActions = ({
     try {
       // txChanged: pending — accepted, about to call participant prepare.
       void broadcastWalletEvent('txChanged', { status: 'pending', commandId: cmdId })
-      const prepared = await walletServiceRequest<PreparedTransactionResponse>(
-        'prepareTransaction',
-        pendingExecute.params,
-      )
-      const signatureBase64 = await vault.signMessage(
-        pendingExecute.account.id,
-        prepared.preparedTransactionHash,
-      )
-      // txChanged: signed — signed locally, about to submit to the participant.
-      void broadcastWalletEvent('txChanged', {
-        status: 'signed',
-        commandId: cmdId,
-        payload: {
-          preparedTransactionHash: prepared.preparedTransactionHash,
-          signature: signatureBase64,
-        },
-      })
-      const executed = await walletServiceRequest<ExecutePreparedResponse>('executePrepared', {
-        ...prepared,
-        partyId: pendingExecute.account.partyId,
-        signatureBase64,
-      })
-
-      await vault.recordTransaction({
-        accountId: pendingExecute.account.id,
-        accountName: pendingExecute.account.name,
-        partyId: pendingExecute.account.partyId,
-        network: pendingExecute.account.network,
-        method: pendingExecute.method,
-        status: 'executed',
-        preparedTransaction: prepared.preparedTransaction,
-        preparedTransactionHash: prepared.preparedTransactionHash,
+      const executed = await executePreparedCommands({
+        account: pendingExecute.account,
         commands: transactionCommands(pendingExecute.params),
+        disclosedContracts: disclosedContracts(pendingExecute.params),
+        method: pendingExecute.method,
+        summary: commandSummary(pendingExecute.params),
         commandId: optionalString(pendingExecute.params.commandId),
         submissionId: optionalString(pendingExecute.params.submissionId),
-        updateId: executed.updateId,
-        completionOffset: executed.completionOffset,
-        commandCount: commandCount(pendingExecute.params),
-        summary: commandSummary(pendingExecute.params),
+        signMessage: vault.signMessage,
+        recordTransaction: vault.recordTransaction,
+        // txChanged: signed — signed locally, about to submit to the participant.
+        onSigned: ({ preparedTransactionHash, signatureBase64 }) => {
+          void broadcastWalletEvent('txChanged', {
+            status: 'signed',
+            commandId: cmdId,
+            payload: { preparedTransactionHash, signature: signatureBase64 },
+          })
+        },
       })
 
       const tx = {

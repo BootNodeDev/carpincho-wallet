@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert'
 import { after, afterEach, before, beforeEach, describe, it } from 'node:test'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
-import type { WalletServiceStatus } from '@/api/walletService'
 import { readWalletSnapshot } from '@/extension/walletSnapshot'
+import type { LedgerStatus } from '@/ledger/status'
 import { NetworkContext } from '@/network/NetworkContext'
 import { installHostedParties } from '@/test-utils/hostedParties'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
@@ -28,7 +28,7 @@ interface Harness {
   switchEndpoint: (options: { networkId?: string; hosts?: string[] }) => Promise<void>
 }
 
-const status = (networkId?: string): WalletServiceStatus => ({ connected: true, networkId })
+const status = (networkId?: string): LedgerStatus => ({ connected: true, networkId })
 
 const scopedNames = (ref: { current: VaultContextValue | null }): string[] =>
   ref.current?.accounts.map((a) => a.name) ?? []

@@ -28,7 +28,6 @@ const SUMMARY: TokenHoldingSummary = {
   utxoCount: 2,
   lockedCount: 0,
   unlockedCount: 2,
-  source: 'utxos',
   holdings: [
     {
       contractId: 'holding-cid-1',

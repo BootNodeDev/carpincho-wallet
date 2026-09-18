@@ -7,6 +7,10 @@ import {
   type PendingTokenTransfer,
   transferDirection,
 } from '@/cip56/transfers'
+import { TRANSFER_INSTRUCTION_INTERFACE_ID } from '@/ledger/acs'
+import { forgetLedgerSessions } from '@/ledger/ledgerApi'
+import type { TokenSdk } from '@/ledger/walletSdk'
+import { fakeSdk, installAcsReads, installLedgerWrites, submissionCalls } from '@/test-utils/ledger'
 import type { AccountPublic } from '@/vault/types'
 
 const originalFetch = globalThis.fetch
@@ -22,87 +26,55 @@ const ACCOUNT: AccountPublic = {
   createdAt: 1,
 }
 
-describe('CIP-56 wallet-service transfer helpers', () => {
+describe('CIP-56 transfer helpers', () => {
   afterEach(() => {
     // Each test replaces fetch with a purpose-built JSON-RPC fake, so restore the global afterward.
     globalThis.fetch = originalFetch
     localStorage.clear()
+    forgetLedgerSessions()
   })
 
-  it('lists pending incoming transfers through wallet-service without reshaping SDK contracts', async () => {
-    // Scenario: wallet-service returns the raw-ish SDK pending transfer contracts.
-    // Carpincho should pass that shape through so a future browser SDK can replace this adapter directly.
-    const pendingContracts = [
-      {
-        contractId: 'transfer-cid-1',
-        interfaceViewValue: {
-          transfer: {
-            sender: 'sender::party',
-            receiver: 'alice::party',
-            amount: '12.5',
-            instrumentId: { admin: 'admin::party', id: 'Amulet' },
-          },
-        },
+  it('lists pending transfers from the transfer-instruction interface view', async () => {
+    // Scenario: the participant answers an interface-filtered ACS query. Carpincho passes the
+    // view through, and asks for every instruction the party is a stakeholder on: direction is
+    // decided later, so pre-filtering here would hide the outgoing ones.
+    const view = {
+      transfer: {
+        sender: 'sender::party',
+        receiver: 'alice::party',
+        amount: '12.5',
+        instrumentId: { admin: 'admin::party', id: 'Amulet' },
       },
-    ]
-    const methods: string[] = []
-    globalThis.fetch = (async (_input, init) => {
-      const body = JSON.parse(String(init?.body)) as { method: string; params: unknown }
-      methods.push(body.method)
-      assert.deepEqual(body.params, { partyId: 'alice::party' })
-      return new Response(JSON.stringify({ result: pendingContracts }), { status: 200 })
-    }) as typeof globalThis.fetch
+    }
+    const { queries } = installAcsReads([{ contractId: 'transfer-cid-1', viewValue: view }])
 
     const result = await listPendingIncomingTransfers('alice::party')
 
-    assert.deepEqual(result, pendingContracts)
-    assert.deepEqual(methods, ['cip56.listPendingTransfers'])
+    assert.deepEqual(queries, [
+      { partyId: 'alice::party', interfaceId: TRANSFER_INSTRUCTION_INTERFACE_ID },
+    ])
+    assert.deepEqual(result, [{ contractId: 'transfer-cid-1', interfaceViewValue: view }])
   })
 
   it('accepts a pending transfer by asking wallet-service for commands and keeping signing in Carpincho', async () => {
     // Scenario: wallet-service uses Node-only SDK helpers to prepare the CIP-56 accept command.
     // Carpincho then prepares, signs, executes, and records the transaction with its local vault key.
-    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
-    globalThis.fetch = (async (_input, init) => {
-      const body = JSON.parse(String(init?.body)) as {
-        method: string
-        params: Record<string, unknown>
-      }
-      calls.push({ method: body.method, params: body.params })
-      if (body.method === 'cip56.acceptTransfer') {
-        return new Response(
-          JSON.stringify({
-            result: {
-              commands: { ExerciseCommand: { choice: 'AcceptTransferInstruction' } },
-              disclosedContracts: [
-                { contractId: 'registry-context-cid', createdEventBlob: 'blob' },
-              ],
-            },
-          }),
-          { status: 200 },
-        )
-      }
-      if (body.method === 'prepareTransaction') {
-        return new Response(
-          JSON.stringify({
-            result: {
-              preparedTransaction: 'prepared-tx',
-              preparedTransactionHash: 'prepared-hash',
-              hashingSchemeVersion: 'HASHING_SCHEME_VERSION_V2',
-            },
-          }),
-          { status: 200 },
-        )
-      }
-      if (body.method === 'executePrepared') {
-        return new Response(JSON.stringify({ result: { updateId: 'update-1' } }), { status: 200 })
-      }
-      throw new Error(`unexpected method ${body.method}`)
-    }) as typeof globalThis.fetch
+    const { calls } = installLedgerWrites({
+      preparedTransaction: 'prepared-tx',
+      preparedTransactionHash: 'prepared-hash',
+      executed: { updateId: 'update-1' },
+    })
+    const { sdk, calls: sdkCalls } = fakeSdk({
+      transferAccept: [
+        { ExerciseCommand: { choice: 'AcceptTransferInstruction' } },
+        [{ contractId: 'registry-context-cid', createdEventBlob: 'blob' }],
+      ],
+    })
     const recorded: unknown[] = []
 
     const result = await acceptPendingTransfer({
       account: ACCOUNT,
+      sdk: sdk as TokenSdk,
       transferInstructionCid: 'transfer-cid-1',
       signMessage: async (accountId, messageBase64) => {
         assert.equal(accountId, 'account-1')
@@ -117,23 +89,28 @@ describe('CIP-56 wallet-service transfer helpers', () => {
 
     assert.deepEqual(result, { updateId: 'update-1' })
     assert.deepEqual(
-      calls.map((call) => call.method),
-      ['cip56.acceptTransfer', 'prepareTransaction', 'executePrepared'],
+      sdkCalls.map((call) => call.method),
+      ['token.transfer.accept'],
     )
-    assert.deepEqual(calls[0]?.params, { transferInstructionCid: 'transfer-cid-1' })
-    assert.deepEqual(calls[1]?.params, {
-      partyId: 'alice::party',
-      actAs: ['alice::party'],
-      commands: { ExerciseCommand: { choice: 'AcceptTransferInstruction' } },
-      disclosedContracts: [{ contractId: 'registry-context-cid', createdEventBlob: 'blob' }],
+    assert.deepEqual(sdkCalls[0]?.params, {
+      transferInstructionCid: 'transfer-cid-1',
+      registryUrl: 'http://localhost:2000/api/validator/v0/scan-proxy',
     })
-    assert.deepEqual(calls[2]?.params, {
-      preparedTransaction: 'prepared-tx',
-      preparedTransactionHash: 'prepared-hash',
-      hashingSchemeVersion: 'HASHING_SCHEME_VERSION_V2',
-      partyId: 'alice::party',
-      signatureBase64: 'signature-base64',
-    })
+    assert.deepEqual(
+      submissionCalls(calls).map((call) => call.resource),
+      ['/v2/interactive-submission/prepare', '/v2/interactive-submission/executeAndWait'],
+    )
+    const prepare = submissionCalls(calls)[0]?.body
+    // The commands the SDK built travel through untouched; only signing is local.
+    assert.deepEqual(prepare?.commands, [
+      { ExerciseCommand: { choice: 'AcceptTransferInstruction' } },
+    ])
+    assert.deepEqual(prepare?.disclosedContracts, [
+      { contractId: 'registry-context-cid', createdEventBlob: 'blob' },
+    ])
+    const execute = submissionCalls(calls)[1]?.body
+    assert.equal(execute?.preparedTransaction, 'prepared-tx')
+    assert.equal(execute?.hashingSchemeVersion, 'HASHING_SCHEME_VERSION_V2')
     assert.equal((recorded[0] as { method?: string } | undefined)?.method, 'cip56.transfer.accept')
   })
 
@@ -141,50 +118,23 @@ describe('CIP-56 wallet-service transfer helpers', () => {
     // Scenario: sending a CIP-56 token should keep the wallet-service SDK boundary
     // thin. Carpincho sends transfer intent data, receives commands, signs the
     // prepared transaction hash locally, and submits that signature.
-    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
-    globalThis.fetch = (async (_input, init) => {
-      const body = JSON.parse(String(init?.body)) as {
-        method: string
-        params: Record<string, unknown>
-      }
-      calls.push({ method: body.method, params: body.params })
-      if (body.method === 'cip56.createTransfer') {
-        return new Response(
-          JSON.stringify({
-            result: {
-              commands: { ExerciseCommand: { choice: 'TransferFactory_Transfer' } },
-              disclosedContracts: [
-                { contractId: 'transfer-context-cid', createdEventBlob: 'blob' },
-              ],
-            },
-          }),
-          { status: 200 },
-        )
-      }
-      if (body.method === 'prepareTransaction') {
-        return new Response(
-          JSON.stringify({
-            result: {
-              preparedTransaction: 'prepared-transfer-tx',
-              preparedTransactionHash: 'prepared-transfer-hash',
-              hashingSchemeVersion: 'HASHING_SCHEME_VERSION_V2',
-            },
-          }),
-          { status: 200 },
-        )
-      }
-      if (body.method === 'executePrepared') {
-        return new Response(JSON.stringify({ result: { updateId: 'update-transfer-1' } }), {
-          status: 200,
-        })
-      }
-      throw new Error(`unexpected method ${body.method}`)
-    }) as typeof globalThis.fetch
+    const { calls } = installLedgerWrites({
+      preparedTransaction: 'prepared-transfer-tx',
+      preparedTransactionHash: 'prepared-transfer-hash',
+      executed: { updateId: 'update-transfer-1' },
+    })
+    const { sdk, calls: sdkCalls } = fakeSdk({
+      transferCreate: [
+        { ExerciseCommand: { choice: 'TransferFactory_Transfer' } },
+        [{ contractId: 'transfer-context-cid', createdEventBlob: 'blob' }],
+      ],
+    })
     const expirationDate = '2026-06-10T15:00:00.000Z'
     const recorded: unknown[] = []
 
     const result = await createTokenTransfer({
       account: ACCOUNT,
+      sdk: sdk as TokenSdk,
       recipient: 'receiver::party',
       amount: '7.5',
       instrumentId: { admin: 'admin::party', id: 'Amulet' },
@@ -203,23 +153,30 @@ describe('CIP-56 wallet-service transfer helpers', () => {
 
     assert.deepEqual(result, { updateId: 'update-transfer-1' })
     assert.deepEqual(
-      calls.map((call) => call.method),
-      ['cip56.createTransfer', 'prepareTransaction', 'executePrepared'],
+      sdkCalls.map((call) => call.method),
+      ['token.transfer.create'],
     )
-    assert.deepEqual(calls[0]?.params, {
+    assert.deepEqual(sdkCalls[0]?.params, {
       sender: 'alice::party',
       recipient: 'receiver::party',
       amount: '7.5',
       instrumentId: 'Amulet',
+      registryUrl: 'http://localhost:2000/api/validator/v0/scan-proxy',
       memo: 'lunch',
-      expirationDate,
+      // The SDK takes a Date, not the ISO string the form holds.
+      expirationDate: new Date(expirationDate),
     })
-    assert.deepEqual(calls[1]?.params, {
-      partyId: 'alice::party',
-      actAs: ['alice::party'],
-      commands: { ExerciseCommand: { choice: 'TransferFactory_Transfer' } },
-      disclosedContracts: [{ contractId: 'transfer-context-cid', createdEventBlob: 'blob' }],
-    })
+    assert.deepEqual(
+      submissionCalls(calls).map((call) => call.resource),
+      ['/v2/interactive-submission/prepare', '/v2/interactive-submission/executeAndWait'],
+    )
+    const prepare = submissionCalls(calls)[0]?.body
+    assert.deepEqual(prepare?.commands, [
+      { ExerciseCommand: { choice: 'TransferFactory_Transfer' } },
+    ])
+    assert.deepEqual(prepare?.disclosedContracts, [
+      { contractId: 'transfer-context-cid', createdEventBlob: 'blob' },
+    ])
     assert.equal((recorded[0] as { method?: string } | undefined)?.method, 'cip56.transfer.create')
   })
 })

@@ -15,7 +15,6 @@ const SUMMARY: TokenHoldingSummary = {
   tokenLabel: 'Amulet',
   instrumentId: { admin: 'dso::party', id: 'Amulet' },
   totalAmount: '12.5',
-  source: 'scan',
 }
 
 interface Handlers {

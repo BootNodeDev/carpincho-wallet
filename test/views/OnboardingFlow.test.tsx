@@ -3,6 +3,8 @@ import { afterEach, describe, it } from 'node:test'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TooltipProvider } from '@/components/ui/Tooltip'
+import { forgetLedgerSessions } from '@/ledger/ledgerApi'
+import { installLedgerStatus } from '@/test-utils/ledger'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
 import { VaultContext, type VaultContextValue } from '@/vault/VaultContext'
 import { OnboardingFlow } from '@/views/onboarding/OnboardingFlow'
@@ -57,16 +59,7 @@ const renderFlow = (overrides: Partial<VaultContextValue> = {}): void => {
 
 // Configure RPC auto-tests on entry; this keeps that probe healthy and deterministic.
 const installHealthyWalletService = (): void => {
-  globalThis.fetch = async () =>
-    new Response(
-      JSON.stringify({
-        result: {
-          connection: { isNetworkConnected: true },
-          network: { networkId: 'canton:local' },
-        },
-      }),
-      { status: 200 },
-    )
+  installLedgerStatus({ networkId: 'canton:local' })
 }
 
 describe('OnboardingFlow', () => {
@@ -74,6 +67,7 @@ describe('OnboardingFlow', () => {
     cleanup()
     localStorage.clear()
     globalThis.fetch = originalFetch
+    forgetLedgerSessions()
   })
 
   it('shows step 1 (Vault) active when there is no vault', () => {
@@ -86,7 +80,7 @@ describe('OnboardingFlow', () => {
   it('shows step 2 (Configure RPC) when the vault exists but no account, with step 1 complete', () => {
     installHealthyWalletService()
     renderFlow({ hasVault: true, accounts: [] })
-    assert.ok(screen.getByLabelText(/wallet-service rpc url/i))
+    assert.ok(screen.getByLabelText(/wallet gateway url/i))
     assert.equal(screen.getByTestId('step-1').getAttribute('data-state'), 'complete')
     assert.equal(screen.getByTestId('step-2').getAttribute('aria-current'), 'step')
   })
@@ -94,7 +88,7 @@ describe('OnboardingFlow', () => {
   it('does not skip the RPC step to the account step on reload (vault exists, no account)', () => {
     installHealthyWalletService()
     renderFlow({ hasVault: true, accounts: [] })
-    assert.ok(screen.getByLabelText(/wallet-service rpc url/i))
+    assert.ok(screen.getByLabelText(/wallet gateway url/i))
     assert.equal(screen.queryByTestId('add-account-hint-input'), null)
   })
 

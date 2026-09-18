@@ -38,8 +38,26 @@ const STANDALONE_SCRIPTS = ['contentScript'] as const
 const define = {
   __APP_VERSION__: JSON.stringify(appVersion),
   __WALLET_ICON_DATA_URL__: JSON.stringify(walletIconDataUrl),
+  // Overridden to true for `vite dev` below. Every build ships it false, so the proxy paths
+  // cannot be reached from the extension or from a deployed web build.
+  __DEV_PROXY__: 'false',
 }
-const alias = { '@': resolve(__dirname, 'src') }
+
+// The gateway's allowedOrigins names the dApp, not the wallet, and the participant sends no
+// CORS headers at all, so the dev server forwards both. Point these elsewhere to develop
+// against something other than a local Splice LocalNet.
+const DEV_GATEWAY_TARGET = process.env.CARPINCHO_DEV_GATEWAY_URL ?? 'http://localhost:3030'
+const DEV_LEDGER_TARGET = process.env.CARPINCHO_DEV_LEDGER_URL ?? 'http://127.0.0.1:2975'
+// `@mojotech/json-type-validation` (a transitive dependency of the wallet SDK) declares its
+// ESM build as `module`, and that build holds a bare `require('lodash.isequal')`. Vite treats a
+// `module` entry as ESM and so never runs the CommonJS transform over it, leaving the `require`
+// to reach the browser and throw "require is not defined" the first time the SDK is used. The
+// UMD build has the same call, but resolving to it makes Vite read the file as CommonJS and
+// rewrite it. The package publishes no `exports` map, so this subpath is importable.
+const alias = {
+  '@': resolve(__dirname, 'src'),
+  '@mojotech/json-type-validation': '@mojotech/json-type-validation/dist/index.umd.js',
+}
 
 const buildStandaloneScripts = (): Plugin => ({
   name: 'carpincho-standalone-scripts',
@@ -81,12 +99,13 @@ const injectManifestVersion = (): Plugin => ({
   },
 })
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const isExtension = mode === 'extension'
+  const isDevServer = command === 'serve'
 
   return {
     base: isExtension ? './' : '/',
-    define,
+    define: { ...define, __DEV_PROXY__: JSON.stringify(isDevServer) },
     plugins: [
       tailwindcss(),
       react(),
@@ -112,6 +131,18 @@ export default defineConfig(({ mode }) => {
       host: 'localhost',
       port: 3011,
       strictPort: true,
+      proxy: {
+        '/dev/gateway': {
+          target: DEV_GATEWAY_TARGET,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/dev\/gateway/, ''),
+        },
+        '/dev/ledger': {
+          target: DEV_LEDGER_TARGET,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/dev\/ledger/, ''),
+        },
+      },
     },
   }
 })

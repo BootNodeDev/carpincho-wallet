@@ -5,6 +5,8 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CreateAccountForm } from '@/components/CreateAccountForm'
 import { TooltipProvider } from '@/components/ui/Tooltip'
+import { forgetLedgerSessions } from '@/ledger/ledgerApi'
+import { gatewayRpcResponse, TEST_LEDGER_BASE_URL } from '@/test-utils/ledger'
 import { VaultContext, type VaultContextValue } from '@/vault/VaultContext'
 
 const originalFetch = globalThis.fetch
@@ -59,6 +61,8 @@ describe('CreateAccountForm', () => {
   afterEach(() => {
     cleanup()
     globalThis.fetch = originalFetch
+    localStorage.clear()
+    forgetLedgerSessions()
     localStorage.clear()
   })
 
@@ -132,27 +136,42 @@ describe('CreateAccountForm', () => {
   })
 
   it('hands the created party to the vault without reading the network itself', async () => {
-    // Scenario: account creation talks to wallet-service for party onboarding only. The
+    // Scenario: account creation talks to the participant for party onboarding only. The
     // network is stamped by the vault from the endpoint in use, so the form must not probe
     // status for a second reading of it -- the fetch stub below throws if it does.
     const user = userEvent.setup()
     const added: Array<Record<string, unknown>> = []
-    globalThis.fetch = (async (input) => {
-      const url = String(input)
-      if (url.endsWith('/admin/party/prepare')) {
-        // Setup: the prepare endpoint returns a valid base64 message for Carpincho to sign.
+    globalThis.fetch = (async (input, init) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes('/api/v0/user')) {
+        const rpc = JSON.parse(String(init?.body ?? '{}')) as { method?: string }
+        return gatewayRpcResponse(rpc.method ?? '') ?? new Response('unexpected', { status: 500 })
+      }
+      const resource = url.replace(TEST_LEDGER_BASE_URL, '')
+      if (resource === '/v2/state/connected-synchronizers') {
+        return new Response(
+          JSON.stringify({ connectedSynchronizers: [{ synchronizerId: 'global-domain::1220' }] }),
+          { status: 200 },
+        )
+      }
+      if (resource === '/v2/parties/external/generate-topology') {
+        // Setup: the participant returns the topology and a valid base64 hash to sign.
         return new Response(
           JSON.stringify({
-            onboardingId: 'onboarding-1',
             partyId: 'alice::fingerprint',
             multiHash: 'AQID',
+            topologyTransactions: ['topology-1'],
           }),
           { status: 200 },
         )
       }
-      if (url.endsWith('/admin/party/complete')) {
-        // Setup: the complete endpoint returns the final external party id.
+      if (resource === '/v2/parties/external/allocate') {
+        // Setup: allocate returns the final external party id.
         return new Response(JSON.stringify({ partyId: 'alice::fingerprint' }), { status: 200 })
+      }
+      if (resource.startsWith('/v2/users/')) {
+        // The act-as grant that makes the new party usable.
+        return new Response(JSON.stringify({ newlyGrantedRights: [] }), { status: 200 })
       }
       throw new Error(`unexpected request: ${url}`)
     }) as typeof globalThis.fetch
@@ -190,11 +209,11 @@ describe('CreateAccountForm', () => {
 describe('CreateAccountForm pipeline wiring', () => {
   const source = (): string => readFileSync('src/components/CreateAccountForm.tsx', 'utf8')
 
-  it('runs prepare -> sign -> complete -> addAccount and calls onSuccess', () => {
+  it('runs topology -> sign -> allocate -> addAccount and calls onSuccess', () => {
     const src = source()
-    assert.match(src, /prepareCreateParty\(/)
+    assert.match(src, /generatePartyTopology\(/)
     assert.match(src, /signMessageBase64\(kp\.privateKeyHex, prepared\.multiHash\)/)
-    assert.match(src, /completeCreateParty\(/)
+    assert.match(src, /allocateExternalParty\(/)
     assert.match(src, /await v\.addAccount\(/)
     assert.match(src, /onSuccess\?\.\(\)/)
   })

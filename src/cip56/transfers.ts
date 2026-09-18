@@ -1,9 +1,6 @@
-import {
-  type ExecutePreparedResponse,
-  executePreparedCommands,
-  type WalletServiceCommands,
-} from '@/api/interactiveSubmission'
-import { walletServiceRequest } from '@/api/walletService'
+import { type ExecutePreparedResponse, executePreparedCommands } from '@/api/interactiveSubmission'
+import { activeInterfaceContracts, TRANSFER_INSTRUCTION_INTERFACE_ID } from '@/ledger/acs'
+import { registryUrl, type TokenSdk, tokenSdk } from '@/ledger/walletSdk'
 import type { AccountPublic } from '@/vault/types'
 import type { VaultContextValue } from '@/vault/VaultContext'
 
@@ -42,6 +39,9 @@ interface AcceptTransferParams {
   transferInstructionCid: string
   signMessage: VaultContextValue['signMessage']
   recordTransaction: VaultContextValue['recordTransaction']
+  // The SDK is loaded on demand and talks to a live registry, so it is the seam a caller
+  // substitutes rather than the transport underneath it.
+  sdk?: TokenSdk
 }
 
 export interface CreateTokenTransferParams {
@@ -53,6 +53,7 @@ export interface CreateTokenTransferParams {
   expirationDate: string
   signMessage: VaultContextValue['signMessage']
   recordTransaction: VaultContextValue['recordTransaction']
+  sdk?: TokenSdk
 }
 
 const TRANSFER_REASON_KEY = 'splice.lfdecentralizedtrust.org/reason'
@@ -105,11 +106,15 @@ export const transferTimeLabel = (value?: string): string => {
   return `${yyyy}-${mm}-${dd} ${hh}:${min} UTC`
 }
 
-// Reads pending transfer contracts through wallet-service, which owns the Node-only SDK dependency.
+// Every transfer instruction the party is a stakeholder on, incoming and outgoing alike:
+// `transferDirection` is what splits them, so the read must not pre-filter.
 export const listPendingIncomingTransfers = async (
   partyId: string,
 ): Promise<PendingTokenTransfer[]> =>
-  await walletServiceRequest<PendingTokenTransfer[]>('cip56.listPendingTransfers', { partyId })
+  await activeInterfaceContracts<PendingTokenTransfer['interfaceViewValue']>(
+    partyId,
+    TRANSFER_INSTRUCTION_INTERFACE_ID,
+  )
 
 // Accepts a transfer using wallet-service SDK commands and Carpincho's local signer.
 export const acceptPendingTransfer = async ({
@@ -117,11 +122,12 @@ export const acceptPendingTransfer = async ({
   transferInstructionCid,
   signMessage,
   recordTransaction,
+  sdk,
 }: AcceptTransferParams): Promise<ExecutePreparedResponse> => {
-  const { commands, disclosedContracts } = await walletServiceRequest<WalletServiceCommands>(
-    'cip56.acceptTransfer',
-    { transferInstructionCid },
-  )
+  const [commands, disclosedContracts] = await (sdk ?? (await tokenSdk())).token.transfer.accept({
+    transferInstructionCid,
+    registryUrl: await registryUrl(),
+  })
   return await executePreparedCommands({
     account,
     commands,
@@ -143,18 +149,20 @@ export const createTokenTransfer = async ({
   expirationDate,
   signMessage,
   recordTransaction,
+  sdk,
 }: CreateTokenTransferParams): Promise<ExecutePreparedResponse> => {
-  const { commands, disclosedContracts } = await walletServiceRequest<WalletServiceCommands>(
-    'cip56.createTransfer',
-    {
-      sender: account.partyId,
-      recipient,
-      amount,
-      instrumentId: instrumentId.id,
-      ...(memo === undefined || memo.trim() === '' ? {} : { memo: memo.trim() }),
-      expirationDate,
-    },
-  )
+  if (instrumentId.id === undefined) {
+    throw new Error('a transfer needs the instrument it is denominated in')
+  }
+  const [commands, disclosedContracts] = await (sdk ?? (await tokenSdk())).token.transfer.create({
+    sender: account.partyId,
+    recipient,
+    amount,
+    instrumentId: instrumentId.id,
+    registryUrl: await registryUrl(),
+    ...(memo === undefined || memo.trim() === '' ? {} : { memo: memo.trim() }),
+    expirationDate: new Date(expirationDate),
+  })
   return await executePreparedCommands({
     account,
     commands,

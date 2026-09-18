@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { completeCreateParty, prepareCreateParty } from '@/api/walletService'
 import { PrimaryButton, SecondaryButton } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/TextInput'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { toast } from '@/components/ui/toast'
+import { allocateExternalParty, generatePartyTopology } from '@/ledger/externalParty'
 import { cn } from '@/utils/cn'
 import { generateKeypair, signMessageBase64 } from '@/vault/keypair'
 import { useVault } from '@/vault/useVault'
@@ -39,15 +39,12 @@ export const CreateAccountForm = ({
     setBusy(true)
     try {
       const kp = await generateKeypair()
-      const prepared = await prepareCreateParty({
+      const prepared = await generatePartyTopology({
         publicKeyBase64: kp.publicKeyBase64,
         partyHint: trimmed,
       })
       const signatureBase64 = await signMessageBase64(kp.privateKeyHex, prepared.multiHash)
-      const completed = await completeCreateParty({
-        onboardingId: prepared.onboardingId,
-        signatureBase64,
-      })
+      const completed = await allocateExternalParty({ prepared, signatureBase64 })
       await v.addAccount({
         name: trimmed,
         partyId: completed.partyId,
