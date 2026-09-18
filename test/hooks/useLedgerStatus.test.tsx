@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { saveRuntimeConfig } from '@/config/runtimeConfig'
-import { useWalletServiceStatus } from '@/hooks/useWalletServiceStatus'
+import { useLedgerStatus } from '@/hooks/useLedgerStatus'
 import { forgetLedgerSessions } from '@/ledger/ledgerApi'
 import { installLedgerStatus } from '@/test-utils/ledger'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
@@ -14,7 +14,7 @@ const OTHER_GATEWAY_URL = 'http://localhost:4030/api/v0/user'
 
 // Renders each field separately so a test can assert one without matching on the others.
 const StatusProbe = ({ pollMs = null }: { pollMs?: number | null }): JSX.Element => {
-  const status = useWalletServiceStatus({ pollMs })
+  const status = useLedgerStatus({ pollMs })
   return (
     <div>
       <output data-testid="connected">{status.connected ? 'connected' : 'not connected'}</output>
@@ -35,7 +35,7 @@ const renderProbe = (pollMs: number | null = null): void => {
   )
 }
 
-describe('useWalletServiceStatus', () => {
+describe('useLedgerStatus', () => {
   afterEach(() => {
     cleanup()
     globalThis.fetch = originalFetch

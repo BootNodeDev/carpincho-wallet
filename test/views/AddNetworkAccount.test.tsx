@@ -37,7 +37,7 @@ const renderView = (overrides: Partial<VaultContextValue> = {}): void => {
   )
 }
 
-const installHealthyWalletService = (): void => {
+const installHealthyGateway = (): void => {
   globalThis.fetch = async () =>
     new Response(
       JSON.stringify({
@@ -76,7 +76,7 @@ describe('AddNetworkAccount', () => {
   it('keeps the footer, so the endpoint list is the way back to a network with an account', async () => {
     // This view replaces Home, which owns the endpoint list, so without the footer the user is
     // stuck: creating an account on the wrong network would be the only way out.
-    installHealthyWalletService()
+    installHealthyGateway()
     renderView()
     await userEvent.click(screen.getByTestId('connection-pill'))
     assert.ok(await screen.findByTestId('connection-settings-sheet'))

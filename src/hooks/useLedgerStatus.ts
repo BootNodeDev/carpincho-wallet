@@ -5,7 +5,7 @@ import { activeGatewayUrl } from '@/config/runtimeConfig'
 import { useRuntimeConfig } from '@/config/useRuntimeConfig'
 import { type LedgerStatus, ledgerStatus } from '@/ledger/status'
 
-interface UseWalletServiceStatusOptions {
+interface UseLedgerStatusOptions {
   pollMs?: number | null
 }
 
@@ -26,9 +26,7 @@ const unreachableStatus = (last: LedgerStatus, reason: string): LedgerStatus => 
 })
 
 // Tracks whether the gateway in use can reach the Canton participant it names.
-export const useWalletServiceStatus = (
-  options: UseWalletServiceStatusOptions = {},
-): LedgerStatus => {
+export const useLedgerStatus = (options: UseLedgerStatusOptions = {}): LedgerStatus => {
   const { config } = useRuntimeConfig()
   const pollMs = options.pollMs === undefined ? DEFAULT_POLL_MS : options.pollMs
   const url = activeGatewayUrl(config)
@@ -36,7 +34,7 @@ export const useWalletServiceStatus = (
   // that described the endpoint just left, and a slow probe cannot land on a later one. A
   // failed poll keeps the last payload for the key, which is what `unreachableStatus` reads.
   const query = useQuery({
-    queryKey: queryKeys.walletServiceStatus(url),
+    queryKey: queryKeys.ledgerStatus(url),
     queryFn: async () => await ledgerStatus({ gatewayUrl: url }),
     refetchInterval: pollMs === null ? false : pollMs,
   })

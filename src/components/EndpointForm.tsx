@@ -3,7 +3,7 @@ import { GhostButton, PrimaryButton } from '@/components/ui/Button'
 import { ALERT_CIRCLE_ICON, ALERT_TRIANGLE_ICON, SPINNER_ICON } from '@/components/ui/icons'
 import { TextInput } from '@/components/ui/TextInput'
 import { type GatewayEndpoint, isEndpointUrl, normalizeEndpointUrl } from '@/config/runtimeConfig'
-import { useWalletServiceTest, type WalletServiceTestState } from '@/hooks/useWalletServiceTest'
+import { type EndpointTestState, useEndpointTest } from '@/hooks/useEndpointTest'
 import { cn } from '@/utils/cn'
 import { displayNetworkId } from '@/utils/network'
 
@@ -16,7 +16,7 @@ const SUCCESS_DOT = (
 
 // Icon, colour and copy per outcome of the Test button; `connected` also renders the network id.
 const RESULT: Record<
-  Exclude<WalletServiceTestState, 'idle'>,
+  Exclude<EndpointTestState, 'idle'>,
   (reason?: string) => { mark: JSX.Element; tone: string; text: string }
 > = {
   testing: () => ({ mark: SPINNER_ICON, tone: 'text-soft', text: 'Testing…' }),
@@ -51,7 +51,7 @@ export const EndpointForm = ({
   const nameId = useId()
   const urlId = useId()
   const resultId = useId()
-  const { state, networkId, reason, testedUrl, test } = useWalletServiceTest()
+  const { state, networkId, reason, testedUrl, test } = useEndpointTest()
 
   const trimmedName = name.trim()
   const trimmedUrl = url.trim()

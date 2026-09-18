@@ -58,7 +58,7 @@ const renderFlow = (overrides: Partial<VaultContextValue> = {}): void => {
 }
 
 // Configure RPC auto-tests on entry; this keeps that probe healthy and deterministic.
-const installHealthyWalletService = (): void => {
+const installHealthyGateway = (): void => {
   installLedgerStatus({ networkId: 'canton:local' })
 }
 
@@ -78,7 +78,7 @@ describe('OnboardingFlow', () => {
   })
 
   it('shows step 2 (Configure RPC) when the vault exists but no account, with step 1 complete', () => {
-    installHealthyWalletService()
+    installHealthyGateway()
     renderFlow({ hasVault: true, accounts: [] })
     assert.ok(screen.getByLabelText(/wallet gateway url/i))
     assert.equal(screen.getByTestId('step-1').getAttribute('data-state'), 'complete')
@@ -86,14 +86,14 @@ describe('OnboardingFlow', () => {
   })
 
   it('does not skip the RPC step to the account step on reload (vault exists, no account)', () => {
-    installHealthyWalletService()
+    installHealthyGateway()
     renderFlow({ hasVault: true, accounts: [] })
     assert.ok(screen.getByLabelText(/wallet gateway url/i))
     assert.equal(screen.queryByTestId('add-account-hint-input'), null)
   })
 
   it('advances to step 3 (Create Account) after the RPC connection is confirmed', async () => {
-    installHealthyWalletService()
+    installHealthyGateway()
     renderFlow({ hasVault: true, accounts: [] })
     await waitFor(() =>
       assert.equal(

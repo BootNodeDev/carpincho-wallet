@@ -17,7 +17,7 @@ const NO_SESSIONS: ConnectedDappSession[] = []
 // an endpoint switch rather than a first run. It keeps the footer, so picking another endpoint
 // is the way out of here and it is the same control as on Home.
 export const AddNetworkAccount = (): JSX.Element => {
-  const walletService = useNetwork()
+  const ledgerStatus = useNetwork()
   const [connectionOpen, setConnectionOpen] = useState(false)
   const dapp = useExtensionDappConnection({
     extensionMode: isExtensionRuntime(),
@@ -46,7 +46,7 @@ export const AddNetworkAccount = (): JSX.Element => {
       </div>
 
       <ConnectionFooter
-        walletService={walletService}
+        ledgerStatus={ledgerStatus}
         dapp={dapp}
         onOpenSettings={() => setConnectionOpen(true)}
       />

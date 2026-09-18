@@ -41,8 +41,8 @@ export const queryKeys = {
     networkId: string | undefined,
     partyIds: readonly string[],
   ): string[] => ['ledger', 'hostedParties', url, networkId ?? '', [...partyIds].sort().join(',')],
-  walletServiceStatus: (url: string): string[] => ['walletService', 'status', url],
-  endpointReachability: (url: string): string[] => ['walletService', 'reachability', url],
+  ledgerStatus: (url: string): string[] => ['ledger', 'status', url],
+  endpointReachability: (url: string): string[] => ['ledger', 'reachability', url],
 }
 
 // A token write moves balances and the pending list at once, so both refresh as a pair.

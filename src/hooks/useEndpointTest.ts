@@ -3,21 +3,16 @@ import { useCallback } from 'react'
 import { ledgerStatus } from '@/ledger/status'
 
 // `not-connected` is the gateway answering while the participant is not: the URL is right.
-export type WalletServiceTestState =
-  | 'idle'
-  | 'testing'
-  | 'connected'
-  | 'not-connected'
-  | 'unreachable'
+export type EndpointTestState = 'idle' | 'testing' | 'connected' | 'not-connected' | 'unreachable'
 
 interface ProbeResult {
-  state: Exclude<WalletServiceTestState, 'idle' | 'testing'>
+  state: Exclude<EndpointTestState, 'idle' | 'testing'>
   networkId?: string
   reason?: string
 }
 
-export interface WalletServiceTest {
-  state: WalletServiceTestState
+export interface EndpointTest {
+  state: EndpointTestState
   networkId?: string
   reason?: string
   testedUrl?: string
@@ -38,7 +33,7 @@ const probe = async (gatewayUrl: string): Promise<ProbeResult> => {
 
 // Probes a draft RPC URL (not the saved config) and exposes the result as gate state.
 // The mutation observes only its latest call, so a slow probe cannot land on a newer one.
-export const useWalletServiceTest = (): WalletServiceTest => {
+export const useEndpointTest = (): EndpointTest => {
   const { mutateAsync, isPending, data, variables } = useMutation({ mutationFn: probe })
 
   // Callers debounce and retry on this identity, so it must not change between renders.

@@ -1,5 +1,5 @@
 import { createContext, type PropsWithChildren } from 'react'
-import { UNKNOWN_NETWORK_STATUS, useWalletServiceStatus } from '@/hooks/useWalletServiceStatus'
+import { UNKNOWN_NETWORK_STATUS, useLedgerStatus } from '@/hooks/useLedgerStatus'
 import type { LedgerStatus } from '@/ledger/status'
 
 // The network the active endpoint reports is read in two places that must agree — the footer
@@ -9,6 +9,6 @@ import type { LedgerStatus } from '@/ledger/status'
 export const NetworkContext = createContext<LedgerStatus>(UNKNOWN_NETWORK_STATUS)
 
 export const NetworkProvider = ({ children }: PropsWithChildren): JSX.Element => {
-  const status = useWalletServiceStatus()
+  const status = useLedgerStatus()
   return <NetworkContext.Provider value={status}>{children}</NetworkContext.Provider>
 }
