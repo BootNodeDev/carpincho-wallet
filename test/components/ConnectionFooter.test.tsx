@@ -4,17 +4,17 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   ConnectionFooter,
+  type ConnectionFooterStatus,
   type DappFooterStatus,
-  type WalletServiceFooterStatus,
 } from '@/components/ConnectionFooter'
 
-const connectedService: WalletServiceFooterStatus = {
+const connectedService: ConnectionFooterStatus = {
   // Wallet-service fixture representing a healthy Canton network connection.
   connected: true,
   networkId: 'canton:local',
 }
 
-const offlineService: WalletServiceFooterStatus = {
+const offlineService: ConnectionFooterStatus = {
   // Wallet-service fixture representing an unreachable service or disconnected Canton network.
   connected: false,
   networkId: 'canton:local',
@@ -50,7 +50,7 @@ describe('ConnectionFooter', () => {
     let settingsCalls = 0
     render(
       <ConnectionFooter
-        walletService={connectedService}
+        ledgerStatus={connectedService}
         dapp={noDapp}
         onOpenSettings={() => {
           settingsCalls += 1
@@ -67,7 +67,7 @@ describe('ConnectionFooter', () => {
     // Scenario: Canton is unavailable, so the pill makes the service problem explicit.
     render(
       <ConnectionFooter
-        walletService={offlineService}
+        ledgerStatus={offlineService}
         dapp={noDapp}
         onOpenSettings={() => undefined}
       />,
@@ -80,7 +80,7 @@ describe('ConnectionFooter', () => {
     // Scenario: wallet-service confirms connectivity but omits the network metadata.
     render(
       <ConnectionFooter
-        walletService={{ connected: true }}
+        ledgerStatus={{ connected: true }}
         dapp={noDapp}
         onOpenSettings={() => undefined}
       />,
@@ -93,7 +93,7 @@ describe('ConnectionFooter', () => {
     // Scenario: nothing is connected and no site context exists.
     render(
       <ConnectionFooter
-        walletService={connectedService}
+        ledgerStatus={connectedService}
         dapp={noDapp}
         onOpenSettings={() => undefined}
       />,
@@ -106,7 +106,7 @@ describe('ConnectionFooter', () => {
     // Scenario: a site is open but has not connected, so its host shows as not connected.
     render(
       <ConnectionFooter
-        walletService={connectedService}
+        ledgerStatus={connectedService}
         dapp={detectedDapp}
         onOpenSettings={() => undefined}
       />,
@@ -123,7 +123,7 @@ describe('ConnectionFooter', () => {
     let disconnects = 0
     render(
       <ConnectionFooter
-        walletService={connectedService}
+        ledgerStatus={connectedService}
         dapp={connectedDapp}
         onDisconnectDapp={() => {
           disconnects += 1
@@ -142,7 +142,7 @@ describe('ConnectionFooter', () => {
     // Scenario: connected dApp without an icon, so the avatar shows the first host letter.
     render(
       <ConnectionFooter
-        walletService={connectedService}
+        ledgerStatus={connectedService}
         dapp={connectedDapp}
         onOpenSettings={() => undefined}
       />,
@@ -155,7 +155,7 @@ describe('ConnectionFooter', () => {
     // Scenario: a connected dApp coexists with an unreachable wallet-service.
     render(
       <ConnectionFooter
-        walletService={offlineService}
+        ledgerStatus={offlineService}
         dapp={connectedDapp}
         onOpenSettings={() => undefined}
       />,

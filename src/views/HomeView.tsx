@@ -41,7 +41,7 @@ export const HomeView = (): JSX.Element => {
   const [busy, setBusy] = useState(false)
   const accountSnapshotRef = useRef<AccountSnapshot>({ accounts: v.accounts, primary: v.primary })
   const extensionMode = isExtensionRuntime()
-  const walletService = useNetwork()
+  const ledgerStatus = useNetwork()
 
   // Connect proposals always use the active account; no in-flow account picker any more.
   const proposalAccount =
@@ -206,7 +206,7 @@ export const HomeView = (): JSX.Element => {
       </Sheet>
 
       <ConnectionFooter
-        walletService={walletService}
+        ledgerStatus={ledgerStatus}
         dapp={dapp}
         onDisconnectDapp={
           performDisconnect === undefined ? undefined : () => setDisconnectConfirmOpen(true)

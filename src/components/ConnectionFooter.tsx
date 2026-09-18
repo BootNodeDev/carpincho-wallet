@@ -4,7 +4,7 @@ import { CHEVRON_DOWN_ICON, DISCONNECT_ICON } from '@/components/ui/icons'
 import { cn } from '@/utils/cn'
 import { displayNetworkId } from '@/utils/network'
 
-export interface WalletServiceFooterStatus {
+export interface ConnectionFooterStatus {
   connected: boolean
   networkId?: string
   reason?: string
@@ -15,7 +15,7 @@ export type DappFooterStatus =
   | { kind: 'detected' | 'connected'; host: string; subtitle: string; icon?: string }
 
 interface ConnectionFooterProps {
-  walletService: WalletServiceFooterStatus
+  ledgerStatus: ConnectionFooterStatus
   dapp: DappFooterStatus
   onDisconnectDapp?: () => void
   onOpenSettings: () => void
@@ -23,13 +23,13 @@ interface ConnectionFooterProps {
 
 // Single-row footer: dApp identity on the left, the network pill (settings + health) on the right.
 export const ConnectionFooter = ({
-  walletService,
+  ledgerStatus,
   dapp,
   onDisconnectDapp,
   onOpenSettings,
 }: ConnectionFooterProps): JSX.Element => {
-  const networkLabel = walletService.connected
-    ? (displayNetworkId(walletService.networkId) ?? 'unknown')
+  const networkLabel = ledgerStatus.connected
+    ? (displayNetworkId(ledgerStatus.networkId) ?? 'unknown')
     : 'Offline'
   const site = dapp.kind === 'none' ? undefined : dapp
   const connected = dapp.kind === 'connected'
@@ -100,7 +100,7 @@ export const ConnectionFooter = ({
         data-testid="connection-pill"
         onClick={onOpenSettings}
         aria-label="Connection settings"
-        title={walletService.reason ?? 'Connection settings'}
+        title={ledgerStatus.reason ?? 'Connection settings'}
         className={cn(
           'flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1.5',
           'text-[0.74rem] font-semibold transition-colors hover:border-border-strong',
@@ -111,10 +111,10 @@ export const ConnectionFooter = ({
           aria-hidden="true"
           className={cn(
             'size-2 shrink-0 rounded-full',
-            walletService.connected ? 'bg-success' : 'bg-danger',
+            ledgerStatus.connected ? 'bg-success' : 'bg-danger',
           )}
         />
-        <span className={walletService.connected ? 'text-foreground' : 'text-danger'}>
+        <span className={ledgerStatus.connected ? 'text-foreground' : 'text-danger'}>
           {networkLabel}
         </span>
         <span className="text-soft [&>svg]:size-3.5">{CHEVRON_DOWN_ICON}</span>

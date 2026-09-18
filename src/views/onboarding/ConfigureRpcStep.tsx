@@ -5,7 +5,7 @@ import { ALERT_CIRCLE_ICON, SPINNER_ICON } from '@/components/ui/icons'
 import { TextInput } from '@/components/ui/TextInput'
 import { activeGatewayUrl, withActiveEndpointUrl } from '@/config/runtimeConfig'
 import { useRuntimeConfig } from '@/config/useRuntimeConfig'
-import { useWalletServiceTest } from '@/hooks/useWalletServiceTest'
+import { useEndpointTest } from '@/hooks/useEndpointTest'
 import { cn } from '@/utils/cn'
 import { displayNetworkId } from '@/utils/network'
 
@@ -27,7 +27,7 @@ export const ConfigureRpcStep = ({ onConfirmed }: ConfigureRpcStepProps): JSX.El
   const { config, saveConfig } = useRuntimeConfig()
   const [url, setUrl] = useState(() => activeGatewayUrl(config))
   const fieldId = useId()
-  const { state, networkId, reason, testedUrl, test } = useWalletServiceTest()
+  const { state, networkId, reason, testedUrl, test } = useEndpointTest()
 
   // Probe on mount and (debounced) whenever the URL changes.
   useEffect(() => {

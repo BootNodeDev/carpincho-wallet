@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { afterEach, describe, it } from 'node:test'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
-import { useWalletServiceTest } from '@/hooks/useWalletServiceTest'
+import { useEndpointTest } from '@/hooks/useEndpointTest'
 import { forgetLedgerSessions } from '@/ledger/ledgerApi'
 import { installLedgerStatus } from '@/test-utils/ledger'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
@@ -12,7 +12,7 @@ const originalFetch = globalThis.fetch
 // publishes mutation state through its own batched notify, so the awaited promise can win the
 // race and leave the hook still reading `idle`. Assert through waitFor, not on the next line.
 
-describe('useWalletServiceTest', () => {
+describe('useEndpointTest', () => {
   afterEach(() => {
     cleanup()
     globalThis.fetch = originalFetch
@@ -21,7 +21,7 @@ describe('useWalletServiceTest', () => {
 
   it('maps a connected status to connected with the network id', async () => {
     installLedgerStatus({ networkId: 'canton:local' })
-    const { result } = renderHook(() => useWalletServiceTest(), {
+    const { result } = renderHook(() => useEndpointTest(), {
       wrapper: TestQueryClientProvider,
     })
     await act(async () => {
@@ -34,7 +34,7 @@ describe('useWalletServiceTest', () => {
 
   it('maps a gateway that answers while the participant does not to not-connected', async () => {
     installLedgerStatus({ networkId: 'canton:local', participant: 'down' })
-    const { result } = renderHook(() => useWalletServiceTest(), {
+    const { result } = renderHook(() => useEndpointTest(), {
       wrapper: TestQueryClientProvider,
     })
     await act(async () => {
@@ -49,7 +49,7 @@ describe('useWalletServiceTest', () => {
     globalThis.fetch = async () => {
       throw new Error('Failed to fetch')
     }
-    const { result } = renderHook(() => useWalletServiceTest(), {
+    const { result } = renderHook(() => useEndpointTest(), {
       wrapper: TestQueryClientProvider,
     })
     await act(async () => {
@@ -73,7 +73,7 @@ describe('useWalletServiceTest', () => {
       return url.startsWith('http://stale/') ? await firstResponse : await answering(input, init)
     }) as typeof fetch
 
-    const { result } = renderHook(() => useWalletServiceTest(), {
+    const { result } = renderHook(() => useEndpointTest(), {
       wrapper: TestQueryClientProvider,
     })
     await act(async () => {
