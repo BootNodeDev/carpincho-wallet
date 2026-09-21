@@ -752,6 +752,14 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
       return
     }
     const { inScope, primaryId } = scopeAccounts()
+    // Scoping resolves a primary the endpoint no longer hosts down to one it does, but only for
+    // this render: the stored id survives, and it is what the first render after the next unlock
+    // hands the provider, before the hosting lookup has answered. Write the resolved one back,
+    // the same rule `removeAccount` applies when the primary leaves the vault.
+    if (unlockedPlaintext !== null && unlockedPlaintext.primaryAccountId !== primaryId) {
+      unlockedPlaintext.primaryAccountId = primaryId
+      void persist().catch(() => undefined)
+    }
     const next = announcedIdentity(inScope, primaryId, networkId)
     if (lastAnnounced.current === undefined || lastAnnounced.current === next) {
       lastAnnounced.current = next
@@ -759,7 +767,7 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
     }
     // Sole writer of the ref on this path: broadcastAccounts records what it sends.
     broadcastAccounts()
-  }, [networkId, isLocked, hostedParties, scopeAccounts, broadcastAccounts])
+  }, [networkId, isLocked, hostedParties, scopeAccounts, broadcastAccounts, persist])
 
   return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>
 }
