@@ -17,8 +17,15 @@ interface AllocateResponse {
 }
 
 // An external party's namespace is the fingerprint of the key that authorizes it, and the party
-// id carries it after the `::`.
-const namespaceOf = (partyId: string): string => partyId.split('::').slice(1).join('::')
+// id carries it after the `::`. That fingerprint is what the ledger expects in `signedBy`, so a
+// party id carrying none would submit a signature signed by nobody.
+export const namespaceOf = (partyId: string): string => {
+  const fingerprint = partyId.split('::').slice(1).join('::')
+  if (fingerprint === '') {
+    throw new Error(`party id "${partyId}" carries no namespace fingerprint`)
+  }
+  return fingerprint
+}
 
 // Asks the participant for the topology transactions that would create this party, and the one
 // hash over them the key has to sign. Nothing is written yet: the party does not exist until

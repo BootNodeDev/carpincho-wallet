@@ -1,17 +1,9 @@
-// Normalizes execution params to the party/actAs/readAs shape Canton expects.
-export const executeParams = (params: unknown, partyId: string): Record<string, unknown> => {
-  const base =
-    typeof params === 'object' && params !== null && !Array.isArray(params)
-      ? (params as Record<string, unknown>)
-      : {}
-  const actAs = Array.isArray(base.actAs) && base.actAs.length > 0 ? base.actAs : [partyId]
-  return {
-    ...base,
-    partyId,
-    actAs,
-    readAs: Array.isArray(base.readAs) ? base.readAs : actAs,
-  }
-}
+// The dApp's own params, as an object. The prepare call acts as the signing party and reads as
+// nobody, so nothing here is rewritten: what the approval modal shows is what the dApp sent.
+export const executeParams = (params: unknown): Record<string, unknown> =>
+  typeof params === 'object' && params !== null && !Array.isArray(params)
+    ? (params as Record<string, unknown>)
+    : {}
 
 // Extracts the original dApp commands for the Activity audit payload.
 export const transactionCommands = (params: Record<string, unknown>): unknown[] | undefined => {

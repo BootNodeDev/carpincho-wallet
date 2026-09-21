@@ -41,15 +41,6 @@ interface ParsedDecimal {
 const holdingInstrumentKey = (instrumentId?: TokenInstrumentId): string =>
   `${instrumentId?.admin ?? 'unknown-admin'}:${instrumentId?.id ?? 'unknown-token'}`
 
-// Compares optional token ids while allowing callers to filter by id-only CC selectors.
-const isSameInstrument = (
-  actual: TokenInstrumentId | undefined,
-  expected: TokenInstrumentId | undefined,
-): boolean =>
-  expected === undefined ||
-  ((expected.id === undefined || actual?.id === expected.id) &&
-    (expected.admin === undefined || actual?.admin === expected.admin))
-
 // Parses positive decimal strings from SDK holding amounts without floating point rounding.
 const parseDecimalAmount = (value: string): ParsedDecimal | undefined => {
   const trimmed = value.trim()
@@ -112,15 +103,6 @@ export const summarizeTokenHoldings = (holdings: TokenHolding[]): TokenHoldingSu
     })
     .sort((a, b) => a.tokenLabel.localeCompare(b.tokenLabel))
 }
-
-// Filters raw UTXOs for the token row the user expanded.
-export const filterTokenHoldingsByInstrument = (
-  holdings: TokenHolding[],
-  instrumentId?: TokenInstrumentId,
-): TokenHolding[] =>
-  holdings.filter((holding) =>
-    isSameInstrument(holding.interfaceViewValue?.instrumentId, instrumentId),
-  )
 
 // Reads active CIP-56 holding UTXOs from the participant's active-contract snapshot.
 export const listTokenHoldings = async (partyId: string): Promise<TokenHolding[]> =>

@@ -78,7 +78,7 @@ export const useProviderRequestHandler = (
         setPendingExecute({
           account,
           method: result.pendingMethod,
-          params: executeParams(request.params, account.partyId),
+          params: executeParams(request.params),
           rawMethod: context.rawMethod ?? request.method,
           origin: context.origin,
           responder,

@@ -79,7 +79,6 @@ export const AssetsPanel = ({
           }}
           account={activeAccount}
           summary={selected}
-          holdingsApi={api}
           sendApi={sendApi}
         />
       )}

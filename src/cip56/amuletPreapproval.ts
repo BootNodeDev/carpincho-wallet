@@ -47,12 +47,15 @@ export const getAmuletPreapprovalStatus = async (
   if (status?.contract == null) {
     return { active: false, expired: false }
   }
+  // Scan is the only source for this date and nothing validates it on the way here, so an
+  // unparsable one reads as a preapproval with no expiry rather than throwing on `toISOString`.
   const expiresAt = new Date(status.contract.payload.expiresAt as unknown as string)
-  const expired = expiresAt.getTime() <= Date.now()
+  const expiresAtMs = expiresAt.getTime()
+  const expired = Number.isNaN(expiresAtMs) ? false : expiresAtMs <= Date.now()
   return {
     contractId: status.contract.contract_id,
     templateId: status.contract.template_id,
-    expiresAt: expiresAt.toISOString(),
+    ...(Number.isNaN(expiresAtMs) ? {} : { expiresAt: expiresAt.toISOString() }),
     active: !expired,
     expired,
   }

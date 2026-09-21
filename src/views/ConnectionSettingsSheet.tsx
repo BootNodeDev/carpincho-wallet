@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { EndpointForm } from '@/components/EndpointForm'
+import { EndpointForm, type EndpointFormValues } from '@/components/EndpointForm'
 import { EndpointListRow } from '@/components/EndpointListRow'
 import { AddRowButton } from '@/components/ui/AddRowButton'
 import { DangerConfirm } from '@/components/ui/DangerConfirm'
@@ -43,16 +43,18 @@ export const ConnectionSettingsSheet = ({
     handleOpenChange(false)
   }
 
-  const onSubmit = ({ name, url }: { name: string; url: string }): void => {
+  // Blank advanced fields are saved as they are: `saveConfig` sanitizes them away, which is
+  // also how one is cleared back to its default.
+  const onSubmit = (values: EndpointFormValues): void => {
     const target = editing
     if (target === null) {
       return
     }
     const endpoints =
       target === 'new'
-        ? [...config.endpoints, { id: newEndpointId(), name, url }]
+        ? [...config.endpoints, { id: newEndpointId(), ...values }]
         : config.endpoints.map((endpoint) =>
-            endpoint.id === target.id ? { ...endpoint, name, url } : endpoint,
+            endpoint.id === target.id ? { ...endpoint, ...values } : endpoint,
           )
     saveConfig({ ...config, endpoints })
     setEditing(null)

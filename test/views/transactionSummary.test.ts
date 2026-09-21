@@ -10,42 +10,14 @@ import {
 } from '@/views/home/transactionSummary'
 
 describe('executeParams', () => {
-  it('injects the active party and defaults actAs / readAs from a plain object', () => {
-    assert.deepEqual(executeParams({ commands: [] }, 'alice::fp'), {
-      commands: [],
-      partyId: 'alice::fp',
-      actAs: ['alice::fp'],
-      readAs: ['alice::fp'],
-    })
+  it('passes a plain params object through untouched', () => {
+    const params = { commands: [], actAs: ['bob::fp'] }
+    assert.deepEqual(executeParams(params), params)
   })
 
-  it('preserves caller-supplied actAs and readAs arrays', () => {
-    assert.deepEqual(executeParams({ actAs: ['bob::fp'], readAs: ['carol::fp'] }, 'alice::fp'), {
-      partyId: 'alice::fp',
-      actAs: ['bob::fp'],
-      readAs: ['carol::fp'],
-    })
-  })
-
-  it('defaults readAs to actAs when readAs is absent', () => {
-    assert.deepEqual(executeParams({ actAs: ['bob::fp'] }, 'alice::fp'), {
-      partyId: 'alice::fp',
-      actAs: ['bob::fp'],
-      readAs: ['bob::fp'],
-    })
-  })
-
-  it('treats non-object params as empty and falls back to the active party', () => {
-    assert.deepEqual(executeParams(null, 'alice::fp'), {
-      partyId: 'alice::fp',
-      actAs: ['alice::fp'],
-      readAs: ['alice::fp'],
-    })
-    assert.deepEqual(executeParams(['ignored'], 'alice::fp'), {
-      partyId: 'alice::fp',
-      actAs: ['alice::fp'],
-      readAs: ['alice::fp'],
-    })
+  it('reads anything that is not a plain object as empty params', () => {
+    assert.deepEqual(executeParams(null), {})
+    assert.deepEqual(executeParams(['ignored']), {})
   })
 })
 
