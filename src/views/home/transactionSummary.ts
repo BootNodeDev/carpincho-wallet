@@ -5,6 +5,11 @@ export const executeParams = (params: unknown): Record<string, unknown> =>
     ? (params as Record<string, unknown>)
     : {}
 
+// The party a dApp asks to act as. Absent means the dApp left the choice to the wallet; present
+// and unheld is a request the wallet must refuse rather than sign as somebody else.
+export const requestedActAs = (params: Record<string, unknown>): string | undefined =>
+  Array.isArray(params.actAs) && typeof params.actAs[0] === 'string' ? params.actAs[0] : undefined
+
 // Extracts the original dApp commands for the Activity audit payload.
 export const transactionCommands = (params: Record<string, unknown>): unknown[] | undefined => {
   const commands = params.commands
