@@ -15,7 +15,7 @@ interface DarUploadPanelProps {
 
 const defaultApi: DarUploadApi = { uploadDarFile }
 
-// Development-only utility for uploading compiled DAML archives through wallet-service.
+// Development-only utility for uploading compiled DAML archives to the participant's ledger.
 export const DarUploadPanel = ({ api = defaultApi }: DarUploadPanelProps): JSX.Element => {
   const [file, setFile] = useState<File | undefined>()
 

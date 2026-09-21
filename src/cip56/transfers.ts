@@ -116,7 +116,7 @@ export const listPendingIncomingTransfers = async (
     TRANSFER_INSTRUCTION_INTERFACE_ID,
   )
 
-// Accepts a transfer using wallet-service SDK commands and Carpincho's local signer.
+// Accepts a transfer using wallet SDK commands and Carpincho's local signer.
 export const acceptPendingTransfer = async ({
   account,
   transferInstructionCid,

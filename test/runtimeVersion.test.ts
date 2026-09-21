@@ -11,7 +11,7 @@ const appVersion = (
 
 describe('runtime provider version', () => {
   it('reports the full package.json version via __APP_VERSION__', async (t) => {
-    // Stub wallet-service status with a minimal success payload so buildStatus
+    // Stub the gateway status with a minimal success payload so buildStatus
     // resolves without a real network call. This closes the loop on the
     // __APP_VERSION__ build-time define.
     t.mock.method(globalThis, 'fetch', () =>

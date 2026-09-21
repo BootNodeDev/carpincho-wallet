@@ -4,7 +4,7 @@ type Defaults = NonNullable<QueryClientConfig['defaultOptions']>
 type QueryDefaults = Defaults['queries']
 type MutationDefaults = Defaults['mutations']
 
-// wallet-service can sit on localhost, where the browser reporting itself offline says nothing
+// The gateway and the participant can sit on localhost, where the browser reporting itself offline says nothing
 // about reachability. Every request is attempted anyway: without this a write is parked until
 // the browser claims a connection again and its promise never settles, and a read is parked with
 // no data and no error, so the footer reads disconnected and a poll never corrects it.

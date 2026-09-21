@@ -15,7 +15,7 @@ describe('DarUploadPanel', () => {
 
   it('uploads the selected DAR through the provided API', async () => {
     // Scenario: a developer selects one compiled DAR and submits it to the
-    // validator-backed wallet-service admin endpoint.
+    // participant's package upload endpoint.
     const selectedFile = new File(['dar-bytes'], 'token.dar')
     let uploaded: File | undefined
 

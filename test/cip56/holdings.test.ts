@@ -40,7 +40,7 @@ describe('CIP-56 holding helpers', () => {
   })
 
   it('totals the holding UTXOs into summaries, since nothing else answers balances now', async () => {
-    // wallet-service could answer this from Scan; the participant cannot, so the summary is
+    // Scan could answer this directly; the participant cannot, so the summary is
     // derived from the same UTXO read the detail list uses.
     const { queries } = installAcsReads([
       {

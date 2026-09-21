@@ -27,7 +27,7 @@ export interface AmuletTapApi {
   tapAmulet: (params: AmuletPreapprovalActionParams) => Promise<ExecutePreparedResponse>
 }
 
-// Detects whether wallet-service returned a real command that needs signing.
+// Detects whether the SDK returned a real command that needs signing.
 const hasCommands = (commands: unknown): boolean =>
   Array.isArray(commands) ? commands.length > 0 : commands !== undefined && commands !== null
 

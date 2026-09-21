@@ -15,7 +15,7 @@ interface ConnectionSettingsSheetProps {
   onOpenChange: (open: boolean) => void
 }
 
-// Wallet-service endpoints: a saved list plus in-place add and edit screens. The endpoint in use is
+// Gateway endpoints: a saved list plus in-place add and edit screens. The endpoint in use is
 // the one every request reads, so picking a row is the whole switch.
 export const ConnectionSettingsSheet = ({
   open,

@@ -97,11 +97,11 @@ describe('OnboardingFlow', () => {
     renderFlow({ hasVault: true, accounts: [] })
     await waitFor(() =>
       assert.equal(
-        (screen.getByTestId('configure-rpc-continue') as HTMLButtonElement).disabled,
+        (screen.getByTestId('configure-gateway-continue') as HTMLButtonElement).disabled,
         false,
       ),
     )
-    await userEvent.click(screen.getByTestId('configure-rpc-continue'))
+    await userEvent.click(screen.getByTestId('configure-gateway-continue'))
     await waitFor(() => assert.ok(screen.getByTestId('add-account-hint-input')))
     assert.equal(screen.getByTestId('step-3').getAttribute('aria-current'), 'step')
     assert.equal(screen.getByTestId('step-2').getAttribute('data-state'), 'complete')

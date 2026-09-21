@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { forgetLedgerSessions } from '@/ledger/ledgerApi'
 import { installLedgerStatus } from '@/test-utils/ledger'
 import { TestQueryClientProvider } from '@/test-utils/queryClient'
-import { ConfigureRpcStep } from '@/views/onboarding/ConfigureRpcStep'
+import { ConfigureGatewayStep } from '@/views/onboarding/ConfigureGatewayStep'
 
 const originalFetch = globalThis.fetch
 
@@ -14,9 +14,9 @@ const respondConnected = (): void => {
 }
 
 const continueButton = (): HTMLButtonElement =>
-  screen.getByTestId('configure-rpc-continue') as HTMLButtonElement
+  screen.getByTestId('configure-gateway-continue') as HTMLButtonElement
 
-describe('ConfigureRpcStep', () => {
+describe('ConfigureGatewayStep', () => {
   afterEach(() => {
     cleanup()
     localStorage.clear()
@@ -26,7 +26,7 @@ describe('ConfigureRpcStep', () => {
 
   it('enables Continue once the gateway is reachable', async () => {
     respondConnected()
-    render(<ConfigureRpcStep onConfirmed={() => undefined} />, {
+    render(<ConfigureGatewayStep onConfirmed={() => undefined} />, {
       wrapper: TestQueryClientProvider,
     })
     assert.equal(continueButton().disabled, true)
@@ -39,7 +39,7 @@ describe('ConfigureRpcStep', () => {
     respondConnected()
     let confirmed = false
     render(
-      <ConfigureRpcStep
+      <ConfigureGatewayStep
         onConfirmed={() => {
           confirmed = true
         }}
@@ -56,7 +56,7 @@ describe('ConfigureRpcStep', () => {
     globalThis.fetch = async () => {
       throw new Error('Failed to fetch')
     }
-    render(<ConfigureRpcStep onConfirmed={() => undefined} />, {
+    render(<ConfigureGatewayStep onConfirmed={() => undefined} />, {
       wrapper: TestQueryClientProvider,
     })
     await waitFor(() => {
@@ -68,7 +68,7 @@ describe('ConfigureRpcStep', () => {
 
   it('re-gates Continue when the URL is edited', async () => {
     respondConnected()
-    render(<ConfigureRpcStep onConfirmed={() => undefined} />, {
+    render(<ConfigureGatewayStep onConfirmed={() => undefined} />, {
       wrapper: TestQueryClientProvider,
     })
     await waitFor(() => assert.equal(continueButton().disabled, false))
@@ -86,7 +86,7 @@ describe('ConfigureRpcStep', () => {
       }
       return await answering(input, init)
     }
-    render(<ConfigureRpcStep onConfirmed={() => undefined} />, {
+    render(<ConfigureGatewayStep onConfirmed={() => undefined} />, {
       wrapper: TestQueryClientProvider,
     })
     await waitFor(() => assert.ok(screen.getByText(/can.t reach the gateway/i)), {

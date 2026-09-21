@@ -16,7 +16,7 @@ export interface EndpointTest {
   networkId?: string
   reason?: string
   testedUrl?: string
-  test: (rpcUrl: string) => Promise<void>
+  test: (gatewayUrl: string) => Promise<void>
 }
 
 // A failed probe is a result to show, not an error to throw, so the mutation always resolves.
@@ -31,15 +31,15 @@ const probe = async (gatewayUrl: string): Promise<ProbeResult> => {
   }
 }
 
-// Probes a draft RPC URL (not the saved config) and exposes the result as gate state.
+// Probes a draft gateway URL (not the saved config) and exposes the result as gate state.
 // The mutation observes only its latest call, so a slow probe cannot land on a newer one.
 export const useEndpointTest = (): EndpointTest => {
   const { mutateAsync, isPending, data, variables } = useMutation({ mutationFn: probe })
 
   // Callers debounce and retry on this identity, so it must not change between renders.
   const test = useCallback(
-    async (rpcUrl: string): Promise<void> => {
-      await mutateAsync(rpcUrl)
+    async (gatewayUrl: string): Promise<void> => {
+      await mutateAsync(gatewayUrl)
     },
     [mutateAsync],
   )

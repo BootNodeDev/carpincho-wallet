@@ -88,7 +88,7 @@ describe('Amulet preapproval helpers', () => {
   })
 
   it('creates an Amulet preapproval using Carpincho local signing', async () => {
-    // Scenario: enabling auto-accept prepares the SDK command in wallet-service,
+    // Scenario: enabling auto-accept prepares the SDK command,
     // then Carpincho signs the proposal while Splice accepts it asynchronously.
     const { calls } = installLedgerWrites({
       preparedTransaction: 'prepared-create-tx',

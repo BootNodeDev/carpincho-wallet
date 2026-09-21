@@ -126,7 +126,7 @@ export const filterTokenHoldingsByInstrument = (
 export const listTokenHoldings = async (partyId: string): Promise<TokenHolding[]> =>
   await activeInterfaceContracts<TokenHoldingView>(partyId, HOLDING_INTERFACE_ID)
 
-// Balances are the UTXOs added up. wallet-service could answer this from Scan without listing
+// Balances are the UTXOs added up. Scan could answer this without listing
 // them; the participant cannot, so the summary is derived from the same read the detail uses.
 export const listTokenHoldingSummaries = async (partyId: string): Promise<TokenHoldingSummary[]> =>
   summarizeTokenHoldings(await listTokenHoldings(partyId))

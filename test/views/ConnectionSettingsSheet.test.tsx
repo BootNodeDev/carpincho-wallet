@@ -12,7 +12,7 @@ import { ConnectionSettingsSheet } from '@/views/ConnectionSettingsSheet'
 const originalFetch = globalThis.fetch
 
 const LOCAL = { id: 'local', name: 'Local', url: 'http://localhost:3030/api/v0/user' }
-const DEVNET = { id: 'devnet', name: 'Devnet', url: 'http://devnet.example/rpc' }
+const DEVNET = { id: 'devnet', name: 'Devnet', url: 'http://devnet.example/api/v0/user' }
 
 const respond = (connected: boolean): void => {
   installLedgerStatus({ networkId: 'canton:local', participant: connected ? 'up' : 'down' })
@@ -61,7 +61,7 @@ describe('ConnectionSettingsSheet', () => {
       ['Local', 'Devnet'],
     )
     assert.equal(rows()[1]?.getAttribute('aria-current'), 'true')
-    assert.ok(screen.getByText('http://devnet.example/rpc'))
+    assert.ok(screen.getByText('http://devnet.example/api/v0/user'))
   })
 
   it('makes the tapped endpoint the one in use, and closes', async () => {
@@ -71,7 +71,7 @@ describe('ConnectionSettingsSheet', () => {
 
     await userEvent.click(rowButton('endpoint-item', 'Devnet'))
 
-    assert.equal(activeGatewayUrl(loadRuntimeConfig()), 'http://devnet.example/rpc')
+    assert.equal(activeGatewayUrl(loadRuntimeConfig()), 'http://devnet.example/api/v0/user')
     assert.ok(openChanges.includes(false))
   })
 
@@ -82,7 +82,7 @@ describe('ConnectionSettingsSheet', () => {
 
     await userEvent.click(rowButton('endpoint-item', 'Devnet'))
 
-    assert.equal(activeGatewayUrl(loadRuntimeConfig()), 'http://devnet.example/rpc')
+    assert.equal(activeGatewayUrl(loadRuntimeConfig()), 'http://devnet.example/api/v0/user')
     assert.equal(getToastEntries().length, 0)
     assert.ok(openChanges.includes(false))
   })
@@ -94,7 +94,10 @@ describe('ConnectionSettingsSheet', () => {
 
     await userEvent.click(screen.getByTestId('endpoint-add'))
     await userEvent.type(screen.getByTestId('endpoint-name-input'), 'Staging')
-    await userEvent.type(screen.getByTestId('endpoint-url-input'), 'http://staging.example/rpc')
+    await userEvent.type(
+      screen.getByTestId('endpoint-url-input'),
+      'http://staging.example/api/v0/user',
+    )
     await userEvent.click(screen.getByTestId('endpoint-save'))
 
     const saved = loadRuntimeConfig()
@@ -115,16 +118,19 @@ describe('ConnectionSettingsSheet', () => {
 
     await userEvent.click(screen.getByTestId('endpoint-add'))
     await userEvent.type(screen.getByTestId('endpoint-name-input'), 'Staging')
-    await userEvent.type(screen.getByTestId('endpoint-url-input'), 'https: //staging.example/rpc')
+    await userEvent.type(
+      screen.getByTestId('endpoint-url-input'),
+      'https: //staging.example/api/v0/user',
+    )
 
     assert.equal(
       (screen.getByTestId('endpoint-url-input') as HTMLInputElement).value,
-      'https://staging.example/rpc',
+      'https://staging.example/api/v0/user',
     )
     await userEvent.click(screen.getByTestId('endpoint-save'))
     assert.equal(
       loadRuntimeConfig().endpoints.find((endpoint) => endpoint.name === 'Staging')?.url,
-      'https://staging.example/rpc',
+      'https://staging.example/api/v0/user',
     )
   })
 
@@ -135,7 +141,7 @@ describe('ConnectionSettingsSheet', () => {
 
     await userEvent.click(screen.getByTestId('endpoint-add'))
     await userEvent.type(screen.getByTestId('endpoint-name-input'), 'Staging')
-    await userEvent.type(screen.getByTestId('endpoint-url-input'), 'staging.example/rpc')
+    await userEvent.type(screen.getByTestId('endpoint-url-input'), 'staging.example/api/v0/user')
 
     assert.equal((screen.getByTestId('endpoint-save') as HTMLButtonElement).disabled, true)
     assert.equal((screen.getByTestId('endpoint-test') as HTMLButtonElement).disabled, true)
@@ -196,7 +202,9 @@ describe('ConnectionSettingsSheet', () => {
 
     await userEvent.click(rowButton('endpoint-remove', 'Devnet'))
     // The confirmation echoes the URL of the endpoint being removed.
-    assert.ok(within(screen.getByTestId('remove-endpoint')).getByText('http://devnet.example/rpc'))
+    assert.ok(
+      within(screen.getByTestId('remove-endpoint')).getByText('http://devnet.example/api/v0/user'),
+    )
     await userEvent.click(screen.getByTestId('confirm-remove-endpoint'))
 
     const saved = loadRuntimeConfig()

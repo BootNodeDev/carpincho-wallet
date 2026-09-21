@@ -53,7 +53,7 @@ export const CIP103_METHODS = [
 const getWalletConnectProjectId = (): string =>
   ((import.meta.env.VITE_WC_PROJECT_ID as string | undefined) ?? '').trim()
 
-// Discovers the WalletConnect CAIP-2 chain from wallet-service status.
+// Discovers the WalletConnect CAIP-2 chain from the network id the gateway reports.
 export const getCantonChain = async (): Promise<string> => await activeNetworkId()
 
 let signClientPromise: Promise<InstanceType<typeof SignClient>> | undefined
