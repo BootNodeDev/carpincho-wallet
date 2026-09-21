@@ -47,7 +47,7 @@ describe('useTokenHoldings', () => {
   })
 
   it('clears previous party holdings while the newly selected party loads', async () => {
-    // Scenario: Alice summaries loaded, then the user selects Bob. Bob's wallet-service
+    // Scenario: Alice summaries loaded, then the user selects Bob. Bob's ledger
     // call can still be in flight, but Alice's balance must no longer appear under Bob.
     const api: Cip56HoldingsApi = {
       listTokenHoldingSummaries: async (partyId) => {

@@ -104,7 +104,7 @@ describe('usePendingCip56Transfers', () => {
 
   it('clears previous party transfers while the newly selected party loads', async () => {
     // Scenario: Alice has an incoming transfer, then the user selects Bob. Bob's
-    // wallet-service call can still be in flight, but Alice's request must not remain visible.
+    // ledger call can still be in flight, but Alice's request must not remain visible.
     const api: Cip56TransferApi = {
       listPendingIncomingTransfers: async (partyId) => {
         if (partyId === ACCOUNT.partyId) {

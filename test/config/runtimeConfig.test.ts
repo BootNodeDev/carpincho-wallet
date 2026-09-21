@@ -42,8 +42,8 @@ describe('runtime config storage', () => {
     // Action: save a two-endpoint list with the second one in use.
     saveRuntimeConfig({
       endpoints: [
-        { id: 'local', name: 'Local', url: 'http://localhost:3010/rpc' },
-        { id: 'devnet', name: 'Devnet', url: 'http://wallet.example/rpc' },
+        { id: 'local', name: 'Local', url: 'http://localhost:3030/api/v0/user' },
+        { id: 'devnet', name: 'Devnet', url: 'http://wallet.example/api/v0/user' },
       ],
       activeEndpointId: 'devnet',
     })
@@ -53,14 +53,14 @@ describe('runtime config storage', () => {
       {
         'carpincho.runtime-config.v4': {
           endpoints: [
-            { id: 'local', name: 'Local', url: 'http://localhost:3010/rpc' },
-            { id: 'devnet', name: 'Devnet', url: 'http://wallet.example/rpc' },
+            { id: 'local', name: 'Local', url: 'http://localhost:3030/api/v0/user' },
+            { id: 'devnet', name: 'Devnet', url: 'http://wallet.example/api/v0/user' },
           ],
           activeEndpointId: 'devnet',
         },
       },
     ])
-    assert.equal(activeGatewayUrl(loadRuntimeConfig()), 'http://wallet.example/rpc')
+    assert.equal(activeGatewayUrl(loadRuntimeConfig()), 'http://wallet.example/api/v0/user')
   })
 
   it('drops a wallet-service install and starts from the default gateway', () => {
@@ -107,32 +107,32 @@ describe('runtime config storage', () => {
     // The mirror, a legacy install and an imported config all land here, and a URL with a
     // space in it is unusable, so this boundary is where it stops.
     saveRuntimeConfig({
-      endpoints: [{ id: 'a', name: 'Devnet', url: ' https: //devnet.example/rpc ' }],
+      endpoints: [{ id: 'a', name: 'Devnet', url: ' https: //devnet.example/api/v0/user ' }],
       activeEndpointId: 'a',
     })
 
-    assert.equal(activeGatewayUrl(loadRuntimeConfig()), 'https://devnet.example/rpc')
+    assert.equal(activeGatewayUrl(loadRuntimeConfig()), 'https://devnet.example/api/v0/user')
   })
 
   it('accepts only http(s) URLs as endpoints', () => {
-    assert.equal(isEndpointUrl('http://localhost:3010/rpc'), true)
-    assert.equal(isEndpointUrl('https: //devnet.example/rpc'), true)
+    assert.equal(isEndpointUrl('http://localhost:3030/api/v0/user'), true)
+    assert.equal(isEndpointUrl('https: //devnet.example/api/v0/user'), true)
     // No scheme, or one fetch cannot use.
-    assert.equal(isEndpointUrl('devnet.example/rpc'), false)
-    assert.equal(isEndpointUrl('ws://devnet.example/rpc'), false)
+    assert.equal(isEndpointUrl('devnet.example/api/v0/user'), false)
+    assert.equal(isEndpointUrl('ws://devnet.example/api/v0/user'), false)
     assert.equal(isEndpointUrl(''), false)
   })
 
   it('falls back to the first endpoint when the id in use is gone', () => {
     // Scenario: the endpoint in use was removed, so the stored id no longer matches a row.
     const config = saveRuntimeConfig({
-      endpoints: [{ id: 'local', name: 'Local', url: 'http://localhost:3010/rpc' }],
+      endpoints: [{ id: 'local', name: 'Local', url: 'http://localhost:3030/api/v0/user' }],
       activeEndpointId: 'removed',
     })
 
     // Expected result: sanitizing re-points the config at the only endpoint left.
     assert.equal(config.activeEndpointId, 'local')
-    assert.equal(activeGatewayUrl(config), 'http://localhost:3010/rpc')
+    assert.equal(activeGatewayUrl(config), 'http://localhost:3030/api/v0/user')
   })
 
   it('reads the endpoint in use from extension storage in a worker', async () => {
@@ -145,8 +145,8 @@ describe('runtime config storage', () => {
             get: async () => ({
               'carpincho.runtime-config.v4': {
                 endpoints: [
-                  { id: 'local', name: 'Local', url: 'http://localhost:3010/rpc' },
-                  { id: 'devnet', name: 'Devnet', url: 'http://wallet.example/rpc' },
+                  { id: 'local', name: 'Local', url: 'http://localhost:3030/api/v0/user' },
+                  { id: 'devnet', name: 'Devnet', url: 'http://wallet.example/api/v0/user' },
                 ],
                 activeEndpointId: 'devnet',
               },
@@ -158,6 +158,9 @@ describe('runtime config storage', () => {
     })
 
     // Expected result: the worker uses the picked endpoint, not the first one.
-    assert.equal(activeGatewayUrl(await loadRuntimeConfigAsync()), 'http://wallet.example/rpc')
+    assert.equal(
+      activeGatewayUrl(await loadRuntimeConfigAsync()),
+      'http://wallet.example/api/v0/user',
+    )
   })
 })

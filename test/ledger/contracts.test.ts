@@ -43,7 +43,7 @@ describe('ledger contract helpers', () => {
 
   it('creates a contract by preparing a CreateCommand and signing with the active account', async () => {
     // Scenario: a developer pastes a template id and JSON payload into Carpincho.
-    // The helper must build the ledger CreateCommand, ask wallet-service to prepare it,
+    // The helper must build the ledger CreateCommand, ask the participant to prepare it,
     // sign only the prepared hash locally, submit the signature, and record the raw command.
     const { calls } = installLedgerWrites({
       preparedTransaction: 'prepared-create',

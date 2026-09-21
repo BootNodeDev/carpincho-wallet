@@ -163,7 +163,7 @@ describe('AssetsPanel', () => {
   })
 
   it('reuses fallback UTXO details from the summary response', async () => {
-    // Scenario: when wallet-service falls back from Scan to UTXOs, the summary
+    // Scenario: when the summary read falls back from Scan to UTXOs, the summary
     // already carries raw holdings, so opening the modal must not refetch them.
     let detailsCalls = 0
     const api: Cip56HoldingsApi = {

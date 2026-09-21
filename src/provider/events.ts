@@ -9,7 +9,7 @@ export type Cip103Event = (typeof CIP103_EVENTS)[number]
 
 // The `statusChanged` body, built in one place so the vault and the service worker cannot
 // describe the same wallet two ways. isNetworkConnected stays true: Carpincho always targets
-// the configured wallet-service, and reachability surfaces through later RPC calls.
+// the configured gateway, and reachability surfaces through later calls.
 export const statusChangedPayload = (
   isConnected: boolean,
 ): {

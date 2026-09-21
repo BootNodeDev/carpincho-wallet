@@ -56,8 +56,8 @@ describe('CIP-56 transfer helpers', () => {
     assert.deepEqual(result, [{ contractId: 'transfer-cid-1', interfaceViewValue: view }])
   })
 
-  it('accepts a pending transfer by asking wallet-service for commands and keeping signing in Carpincho', async () => {
-    // Scenario: wallet-service uses Node-only SDK helpers to prepare the CIP-56 accept command.
+  it('accepts a pending transfer by asking the SDK for commands and keeping signing in Carpincho', async () => {
+    // Scenario: the wallet SDK builds the CIP-56 accept command.
     // Carpincho then prepares, signs, executes, and records the transaction with its local vault key.
     const { calls } = installLedgerWrites({
       preparedTransaction: 'prepared-tx',
@@ -115,7 +115,7 @@ describe('CIP-56 transfer helpers', () => {
   })
 
   it('creates a token transfer by preparing SDK commands and signing only the prepared hash', async () => {
-    // Scenario: sending a CIP-56 token should keep the wallet-service SDK boundary
+    // Scenario: sending a CIP-56 token should keep the wallet SDK boundary
     // thin. Carpincho sends transfer intent data, receives commands, signs the
     // prepared transaction hash locally, and submits that signature.
     const { calls } = installLedgerWrites({

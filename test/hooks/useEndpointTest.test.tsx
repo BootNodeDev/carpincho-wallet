@@ -25,11 +25,11 @@ describe('useEndpointTest', () => {
       wrapper: TestQueryClientProvider,
     })
     await act(async () => {
-      await result.current.test('http://host/rpc')
+      await result.current.test('http://host/api/v0/user')
     })
     await waitFor(() => assert.equal(result.current.state, 'connected'))
     assert.equal(result.current.networkId, 'canton:local')
-    assert.equal(result.current.testedUrl, 'http://host/rpc')
+    assert.equal(result.current.testedUrl, 'http://host/api/v0/user')
   })
 
   it('maps a gateway that answers while the participant does not to not-connected', async () => {
@@ -38,11 +38,11 @@ describe('useEndpointTest', () => {
       wrapper: TestQueryClientProvider,
     })
     await act(async () => {
-      await result.current.test('http://host/rpc')
+      await result.current.test('http://host/api/v0/user')
     })
     await waitFor(() => assert.equal(result.current.state, 'not-connected'))
     assert.match(result.current.reason ?? '', /fetch failed/)
-    assert.equal(result.current.testedUrl, 'http://host/rpc')
+    assert.equal(result.current.testedUrl, 'http://host/api/v0/user')
   })
 
   it('maps a thrown request to unreachable with the error message', async () => {
@@ -53,11 +53,11 @@ describe('useEndpointTest', () => {
       wrapper: TestQueryClientProvider,
     })
     await act(async () => {
-      await result.current.test('http://host/rpc')
+      await result.current.test('http://host/api/v0/user')
     })
     await waitFor(() => assert.equal(result.current.state, 'unreachable'))
     assert.equal(result.current.reason, 'Failed to fetch')
-    assert.equal(result.current.testedUrl, 'http://host/rpc')
+    assert.equal(result.current.testedUrl, 'http://host/api/v0/user')
   })
 
   it('ignores a superseded probe and keeps only the latest result', async () => {

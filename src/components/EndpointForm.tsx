@@ -40,7 +40,7 @@ interface EndpointFormProps {
   onSubmit: (values: { name: string; url: string }) => void
 }
 
-// Name + RPC URL + Test, shared by the add and edit screens of the Connection sheet.
+// Name + gateway URL + Test, shared by the add and edit screens of the Connection sheet.
 export const EndpointForm = ({
   endpoint,
   submitLabel,
@@ -102,7 +102,7 @@ export const EndpointForm = ({
           className="font-mono"
           value={url}
           onChange={(e) => setUrl(normalizeEndpointUrl(e.target.value))}
-          placeholder="http://localhost:3010/rpc"
+          placeholder="http://localhost:3030/api/v0/user"
           error={malformed || result === 'unreachable'}
           aria-errormessage={malformed || result === 'unreachable' ? resultId : undefined}
         />

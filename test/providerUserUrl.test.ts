@@ -8,7 +8,7 @@ const setChrome = (value: unknown): void => {
   Object.defineProperty(globalThis, 'chrome', { configurable: true, value })
 }
 
-// buildStatus asks wallet-service for the network before it answers; stub it so these tests
+// buildStatus asks the gateway for the network before it answers; stub it so these tests
 // are about the URL and nothing else.
 const stubStatusFetch = (t: TestContext): void => {
   t.mock.method(globalThis, 'fetch', () =>

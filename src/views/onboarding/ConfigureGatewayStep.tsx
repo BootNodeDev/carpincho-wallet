@@ -19,11 +19,11 @@ const STATUS_BAND_CLASS = {
   pending: 'items-center bg-muted text-soft',
 } as const
 
-export interface ConfigureRpcStepProps {
+export interface ConfigureGatewayStepProps {
   onConfirmed: () => void
 }
 
-export const ConfigureRpcStep = ({ onConfirmed }: ConfigureRpcStepProps): JSX.Element => {
+export const ConfigureGatewayStep = ({ onConfirmed }: ConfigureGatewayStepProps): JSX.Element => {
   const { config, saveConfig } = useRuntimeConfig()
   const [url, setUrl] = useState(() => activeGatewayUrl(config))
   const fieldId = useId()
@@ -37,7 +37,7 @@ export const ConfigureRpcStep = ({ onConfirmed }: ConfigureRpcStepProps): JSX.El
     return () => window.clearTimeout(id)
   }, [url, test])
 
-  // Auto-retry until Canton answers so the step unblocks once wallet-service comes up.
+  // Auto-retry until Canton answers so the step unblocks once the gateway comes up.
   useEffect(() => {
     if (state !== 'unreachable' && state !== 'not-connected') {
       return undefined
@@ -71,7 +71,7 @@ export const ConfigureRpcStep = ({ onConfirmed }: ConfigureRpcStepProps): JSX.El
         className="font-mono"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        placeholder="http://localhost:3010/rpc"
+        placeholder="http://localhost:3030/api/v0/user"
       />
 
       <div
@@ -118,7 +118,7 @@ export const ConfigureRpcStep = ({ onConfirmed }: ConfigureRpcStepProps): JSX.El
 
       <PrimaryButton
         className="w-full mt-6"
-        data-testid="configure-rpc-continue"
+        data-testid="configure-gateway-continue"
         disabled={!canContinue}
         onClick={onContinue}
       >

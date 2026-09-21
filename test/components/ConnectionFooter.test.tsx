@@ -9,13 +9,13 @@ import {
 } from '@/components/ConnectionFooter'
 
 const connectedService: ConnectionFooterStatus = {
-  // Wallet-service fixture representing a healthy Canton network connection.
+  // Status fixture representing a healthy Canton network connection.
   connected: true,
   networkId: 'canton:local',
 }
 
 const offlineService: ConnectionFooterStatus = {
-  // Wallet-service fixture representing an unreachable service or disconnected Canton network.
+  // Status fixture representing an unreachable gateway or disconnected Canton network.
   connected: false,
   networkId: 'canton:local',
 }
@@ -63,7 +63,7 @@ describe('ConnectionFooter', () => {
     assert.equal(settingsCalls, 1)
   })
 
-  it('shows the offline pill when the wallet-service is unreachable', () => {
+  it('shows the offline pill when the gateway is unreachable', () => {
     // Scenario: Canton is unavailable, so the pill makes the service problem explicit.
     render(
       <ConnectionFooter
@@ -77,7 +77,7 @@ describe('ConnectionFooter', () => {
   })
 
   it('marks a connected service with a missing network id as unknown', () => {
-    // Scenario: wallet-service confirms connectivity but omits the network metadata.
+    // Scenario: the gateway confirms connectivity but omits the network metadata.
     render(
       <ConnectionFooter
         ledgerStatus={{ connected: true }}
@@ -151,8 +151,8 @@ describe('ConnectionFooter', () => {
     assert.ok(screen.getByText('L'))
   })
 
-  it('keeps dApp connection and wallet-service health independent', () => {
-    // Scenario: a connected dApp coexists with an unreachable wallet-service.
+  it('keeps dApp connection and gateway health independent', () => {
+    // Scenario: a connected dApp coexists with an unreachable gateway.
     render(
       <ConnectionFooter
         ledgerStatus={offlineService}

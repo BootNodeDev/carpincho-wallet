@@ -362,8 +362,8 @@ export const VaultProvider = ({ children }: PropsWithChildren): JSX.Element => {
 
   // Caller supplies the keypair (already used to create the Canton party);
   // generating one here would desync the vault entry from the account. The network is noted from
-  // the endpoint in use, which is where the party was just created. wallet-service always names
-  // a network (`NETWORK` defaults to `canton:local`), so the empty fallback only stands in for
+  // the endpoint in use, which is where the party was just created. The gateway always names
+  // a network, so the empty fallback only stands in for
   // the moment before the first status poll lands, and `toPublic` reports the live label anyway.
   const addAccount = useCallback(
     async (args: NewAccountArgs): Promise<AccountPublic> => {

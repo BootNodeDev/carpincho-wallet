@@ -28,7 +28,7 @@ const DEFAULT_GATEWAY_URL = isDevProxy() ? devGatewayUrl() : 'http://localhost:3
 // LocalNet ships this as the self_signed client secret for every gateway network it seeds.
 export const DEFAULT_CLIENT_SECRET = 'unsafe'
 
-// Splice LocalNet as published on the host, the same trio wallet-service defaulted to.
+// Splice LocalNet as published on the host.
 export const DEFAULT_VALIDATOR_URL = 'http://localhost:2000/api/validator'
 export const DEFAULT_SCAN_API_URL = 'http://scan.localhost:4000/api/scan'
 export const DEFAULT_REGISTRY_URL = 'http://localhost:2000/api/validator/v0/scan-proxy'
@@ -60,7 +60,7 @@ const dispatchRuntimeConfigChange = (config: RuntimeConfig): void => {
   window.dispatchEvent(new CustomEvent('carpincho-runtime-config-changed', { detail: config }))
 }
 
-// Mirrors popup-local config into extension storage so the MV3 worker can reach wallet-service.
+// Mirrors popup-local config into extension storage so the MV3 worker can reach the gateway.
 const persistChromeRuntimeConfig = (config: RuntimeConfig): void => {
   void Promise.resolve(chromeLocalStorage()?.set({ [STORAGE_KEY]: config })).catch(() => undefined)
 }

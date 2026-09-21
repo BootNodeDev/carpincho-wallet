@@ -18,7 +18,7 @@ describe('createQueryClient', () => {
   })
 
   it('runs a mutation while the browser reports itself offline', async () => {
-    // Scenario: wallet-service on localhost stays reachable with no internet connection.
+    // Scenario: the gateway on localhost stays reachable with no internet connection.
     // A write must be attempted, not parked until the browser claims a connection again.
     onlineManager.setOnline(false)
     const client = createQueryClient()
