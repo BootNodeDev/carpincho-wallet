@@ -185,6 +185,23 @@ describe('VaultContext account scoping', () => {
     assert.equal(harness.ref.current?.primary?.id, bobId)
   })
 
+  it('does not let a primary the ledger stopped hosting come back on a later endpoint', async () => {
+    // The wiped-LocalNet case: scoping resolved the primary for the render, but the stored id
+    // survived and won the next first render — before the hosting lookup answered — so a dApp
+    // request went out for a party the participant no longer hosts.
+    const harness = await seedVault()
+    assert.equal(harness.ref.current?.primary?.id, harness.aliceId)
+    const bobId = harness.ref.current?.accounts[1]?.id ?? ''
+
+    // alice's ledger goes away; bob is what this endpoint can act as.
+    await harness.switchEndpoint({ networkId: DEVNET, hosts: [party('bob'), party('carol')] })
+    assert.equal(harness.ref.current?.primary?.id, bobId)
+
+    // Back on an endpoint that hosts alice again, the resolved primary is what was stored.
+    await harness.switchEndpoint({ networkId: LOCAL, hosts: [party('alice'), party('bob')] })
+    assert.equal(harness.ref.current?.primary?.id, bobId)
+  })
+
   it('keeps every account visible while the endpoint cannot answer', async () => {
     // Nothing works until it answers anyway, and emptying the wallet on a hiccup would bounce
     // the user to the create-account screen.
