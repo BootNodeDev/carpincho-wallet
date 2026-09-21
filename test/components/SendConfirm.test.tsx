@@ -142,19 +142,14 @@ describe('SendConfirm', () => {
     assert.equal(screen.getByTestId('send-confirm').textContent, 'Confirm')
   })
 
-  it('refreshes balances after a send without re-reading the open token UTXO list', async () => {
-    // Scenario: the sheet closes as the send lands, so refetching its UTXO list would be a
-    // listHoldings round trip with nothing left to render it. Balances still refresh.
+  it('refreshes balances after a send', async () => {
+    // Scenario: a send moves the balance the sheet was opened on, so the holdings summary
+    // refetches. The summaries carry their own UTXOs, so this one read covers both.
     let summaryReads = 0
-    let detailReads = 0
     const Reads = (): JSX.Element => {
       useQuery({
         queryKey: queryKeys.holdingSummaries(ACCOUNT),
         queryFn: async () => (summaryReads += 1),
-      })
-      useQuery({
-        queryKey: queryKeys.holdingDetails(ACCOUNT, SUMMARY.key),
-        queryFn: async () => (detailReads += 1),
       })
       return <span data-testid="reads" />
     }
@@ -165,12 +160,11 @@ describe('SendConfirm', () => {
       () => undefined,
       <Reads />,
     )
-    await waitFor(() => assert.equal(detailReads, 1))
+    await waitFor(() => assert.equal(summaryReads, 1))
 
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
 
     await waitFor(() => assert.equal(summaryReads, 2))
-    assert.equal(detailReads, 1)
   })
 
   it('exposes the request JSON behind a View data expander', () => {

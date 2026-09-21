@@ -1,8 +1,22 @@
 import { useId, useState } from 'react'
 import { GhostButton, PrimaryButton } from '@/components/ui/Button'
-import { ALERT_CIRCLE_ICON, ALERT_TRIANGLE_ICON, SPINNER_ICON } from '@/components/ui/icons'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/Collapsible'
+import {
+  ALERT_CIRCLE_ICON,
+  ALERT_TRIANGLE_ICON,
+  CHEVRON_DOWN_ICON,
+  SPINNER_ICON,
+} from '@/components/ui/icons'
 import { TextInput } from '@/components/ui/TextInput'
-import { type GatewayEndpoint, isEndpointUrl, normalizeEndpointUrl } from '@/config/runtimeConfig'
+import {
+  DEFAULT_CLIENT_SECRET,
+  DEFAULT_REGISTRY_URL,
+  DEFAULT_SCAN_API_URL,
+  DEFAULT_VALIDATOR_URL,
+  type GatewayEndpoint,
+  isEndpointUrl,
+  normalizeEndpointUrl,
+} from '@/config/runtimeConfig'
 import { type EndpointTestState, useEndpointTest } from '@/hooks/useEndpointTest'
 import { cn } from '@/utils/cn'
 import { displayNetworkId } from '@/utils/network'
@@ -33,14 +47,58 @@ const RESULT: Record<
   }),
 }
 
+// Everything an endpoint holds. Blank means "use the default", which is what the config
+// sanitizer reads an empty string as, so nothing here has to decide that a second time.
+export interface EndpointFormValues {
+  name: string
+  url: string
+  networkId: string
+  clientSecret: string
+  validatorUrl: string
+  scanApiUrl: string
+  registryUrl: string
+}
+
 interface EndpointFormProps {
   // Omitted when adding a new endpoint.
   endpoint?: GatewayEndpoint
   submitLabel: string
-  onSubmit: (values: { name: string; url: string }) => void
+  onSubmit: (values: EndpointFormValues) => void
 }
 
-// Name + gateway URL + Test, shared by the add and edit screens of the Connection sheet.
+// One optional field of the Advanced section: blank falls back to what the placeholder names.
+const AdvancedField = ({
+  label,
+  testId,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string
+  testId: string
+  value: string
+  onChange: (next: string) => void
+  placeholder: string
+}): JSX.Element => {
+  const id = useId()
+  return (
+    <div>
+      <label htmlFor={id}>{label}</label>
+      <TextInput
+        id={id}
+        data-testid={testId}
+        className="font-mono"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
+    </div>
+  )
+}
+
+// Name + gateway URL + Test, shared by the add and edit screens of the Connection sheet. The
+// rest of an endpoint sits behind Advanced: a LocalNet gateway needs none of it, and a remote
+// one cannot work without it.
 export const EndpointForm = ({
   endpoint,
   submitLabel,
@@ -48,6 +106,12 @@ export const EndpointForm = ({
 }: EndpointFormProps): JSX.Element => {
   const [name, setName] = useState(endpoint?.name ?? '')
   const [url, setUrl] = useState(endpoint?.url ?? '')
+  const [networkInput, setNetworkInput] = useState(endpoint?.networkId ?? '')
+  const [secret, setSecret] = useState(endpoint?.clientSecret ?? '')
+  const [validator, setValidator] = useState(endpoint?.validatorUrl ?? '')
+  const [scan, setScan] = useState(endpoint?.scanApiUrl ?? '')
+  const [registry, setRegistry] = useState(endpoint?.registryUrl ?? '')
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const nameId = useId()
   const urlId = useId()
   const resultId = useId()
@@ -67,7 +131,15 @@ export const EndpointForm = ({
       className="flex flex-col gap-4 pt-1"
       onSubmit={(e) => {
         e.preventDefault()
-        onSubmit({ name: trimmedName, url: trimmedUrl })
+        onSubmit({
+          name: trimmedName,
+          url: trimmedUrl,
+          networkId: networkInput.trim(),
+          clientSecret: secret.trim(),
+          validatorUrl: normalizeEndpointUrl(validator),
+          scanApiUrl: normalizeEndpointUrl(scan),
+          registryUrl: normalizeEndpointUrl(registry),
+        })
       }}
     >
       <div>
@@ -135,6 +207,61 @@ export const EndpointForm = ({
           </p>
         )}
       </div>
+
+      <Collapsible
+        open={advancedOpen}
+        onOpenChange={setAdvancedOpen}
+      >
+        <CollapsibleTrigger
+          testId="endpoint-advanced"
+          className="justify-between text-[0.82rem] font-semibold text-muted-foreground"
+        >
+          Advanced
+          <span
+            aria-hidden="true"
+            className={cn('transition-transform [&>svg]:size-4', advancedOpen && 'rotate-180')}
+          >
+            {CHEVRON_DOWN_ICON}
+          </span>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="flex flex-col gap-4 pt-4">
+          <AdvancedField
+            label="Network ID"
+            testId="endpoint-network-input"
+            value={networkInput}
+            onChange={setNetworkInput}
+            placeholder="the gateway's only network"
+          />
+          <AdvancedField
+            label="Client secret"
+            testId="endpoint-secret-input"
+            value={secret}
+            onChange={setSecret}
+            placeholder={DEFAULT_CLIENT_SECRET}
+          />
+          <AdvancedField
+            label="Validator URL"
+            testId="endpoint-validator-input"
+            value={validator}
+            onChange={setValidator}
+            placeholder={DEFAULT_VALIDATOR_URL}
+          />
+          <AdvancedField
+            label="Scan API URL"
+            testId="endpoint-scan-input"
+            value={scan}
+            onChange={setScan}
+            placeholder={DEFAULT_SCAN_API_URL}
+          />
+          <AdvancedField
+            label="Registry URL"
+            testId="endpoint-registry-input"
+            value={registry}
+            onChange={setRegistry}
+            placeholder={DEFAULT_REGISTRY_URL}
+          />
+        </CollapsibleContent>
+      </Collapsible>
 
       <PrimaryButton
         type="submit"

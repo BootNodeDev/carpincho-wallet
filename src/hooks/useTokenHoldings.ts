@@ -1,15 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import {
-  listTokenHoldingSummaries,
-  type TokenHolding,
-  type TokenHoldingSummary,
-} from '@/cip56/holdings'
+import { listTokenHoldingSummaries, type TokenHoldingSummary } from '@/cip56/holdings'
 import { queryKeys } from '@/config/queryKeys'
 import type { AccountPublic } from '@/vault/types'
 
 export interface Cip56HoldingsApi {
   listTokenHoldingSummaries: (partyId: string) => Promise<TokenHoldingSummary[]>
-  listTokenHoldings?: (partyId: string) => Promise<TokenHolding[]>
 }
 
 export interface TokenHoldingsState {

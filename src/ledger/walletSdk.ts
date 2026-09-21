@@ -25,41 +25,46 @@ const spliceUrls = async (): Promise<SpliceUrls> => {
   }
 }
 
-const sdks = new Map<string, Promise<TokenSdk>>()
-
-const openSdk = async (): Promise<TokenSdk> => {
+const openSdk = async (
+  ledgerClientUrl: string,
+  accessToken: string,
+  urls: SpliceUrls,
+): Promise<TokenSdk> => {
   // The SDK is the heaviest dependency here and only the CIP-56 and Amulet paths need it, so it
   // is imported inside the function body the way `src/wc/client.ts` imports WalletConnect.
   const { SDK } = await import('@canton-network/wallet-sdk')
-  const session = await ledgerSession()
-  const { validatorUrl, scanApiUrl, registryUrl } = await spliceUrls()
+  const { validatorUrl, scanApiUrl, registryUrl } = urls
   // The gateway's token is what the participant and the validator's scan-proxy both accept, so
   // the SDK is handed the same one rather than being given a second credential to manage.
-  const auth = { method: 'static', token: session.accessToken } as const
+  const auth = { method: 'static', token: accessToken } as const
   return await SDK.create({
     auth,
-    ledgerClientUrl: session.baseUrl,
+    ledgerClientUrl,
     logAdapter: 'console',
     token: { validatorUrl, auth, registries: [registryUrl] },
     amulet: { validatorUrl, scanApiUrl, registryUrl, auth },
   })
 }
 
-// One SDK per gateway session and Splice trio. A token refresh moves the key, so an SDK built
-// on an expired token is replaced rather than reused.
+// One SDK at a time, for the session and Splice trio in use. A token refresh or an endpoint
+// change moves the key, and the SDK built on what it replaced is dropped rather than kept
+// alongside it: nothing reaches two endpoints at once, so a second entry could only be stale.
+let cached: { key: string; sdk: Promise<TokenSdk> } | undefined
+
 export const tokenSdk = async (): Promise<TokenSdk> => {
   const session = await ledgerSession()
   const urls = await spliceUrls()
-  const key = `${session.baseUrl}|${session.accessToken}|${urls.registryUrl}|${urls.scanApiUrl}`
-  const existing = sdks.get(key)
-  if (existing !== undefined) {
-    return await existing
+  const key = `${session.baseUrl}|${session.accessToken}|${urls.validatorUrl}|${urls.scanApiUrl}|${urls.registryUrl}`
+  if (cached?.key === key) {
+    return await cached.sdk
   }
-  const opened = openSdk().catch((error: unknown) => {
-    sdks.delete(key)
+  const opened = openSdk(session.baseUrl, session.accessToken, urls).catch((error: unknown) => {
+    if (cached?.key === key) {
+      cached = undefined
+    }
     throw error
   })
-  sdks.set(key, opened)
+  cached = { key, sdk: opened }
   return await opened
 }
 

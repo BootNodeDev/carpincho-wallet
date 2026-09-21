@@ -14,14 +14,6 @@ export const queryKeys = {
     'holdingSummaries',
     ...scope(account),
   ],
-  // Without a summary key this is the prefix for every token's UTXO list, which is what a
-  // write invalidates; with one it is the key of a single token's list.
-  holdingDetails: (account: AccountScope, summaryKey?: string): (string | undefined)[] => [
-    'cip56',
-    'holdingDetails',
-    ...scope(account),
-    ...(summaryKey === undefined ? [] : [summaryKey]),
-  ],
   incomingTransfers: (account: AccountScope): (string | undefined)[] => [
     'cip56',
     'incomingTransfers',
@@ -51,12 +43,9 @@ export const invalidateTokenState = async (
   account: AccountScope,
 ): Promise<void> => {
   await Promise.all([
+    // The summaries carry the UTXOs they were added up from, so this one refresh is also what
+    // refills the detail sheet's holdings list.
     client.invalidateQueries({ queryKey: queryKeys.holdingSummaries(account) }),
-    // Marked stale without fetching: a token's UTXO list is only read while its detail sheet is
-    // open, and the one write reachable from there (send) closes the sheet as it lands, so a
-    // refetch here is a full listHoldings round trip nothing is left to render. The sheet loads
-    // fresh on every open regardless, since nothing is ever cached as fresh.
-    client.invalidateQueries({ queryKey: queryKeys.holdingDetails(account), refetchType: 'none' }),
     client.invalidateQueries({ queryKey: queryKeys.incomingTransfers(account) }),
   ])
 }

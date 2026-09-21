@@ -48,8 +48,18 @@ const targetFromEndpoint = (
   }
 }
 
-const resolveTarget = async (options?: LedgerRequestOptions): Promise<LedgerTarget> =>
-  targetFromEndpoint(activeEndpoint(await loadRuntimeConfigAsync()), options)
+// A probe names the endpoint it is for. Reading the network and secret off the endpoint in use
+// would test a saved endpoint against another one's settings, so the url picks its own entry and
+// a url belonging to no saved endpoint falls back to the defaults rather than to the active one.
+const resolveTarget = async (options?: LedgerRequestOptions): Promise<LedgerTarget> => {
+  const config = await loadRuntimeConfigAsync()
+  const url = trimmed(options?.gatewayUrl)
+  const endpoint =
+    url === undefined
+      ? activeEndpoint(config)
+      : config.endpoints.find((candidate) => trimmed(candidate.url) === url)
+  return targetFromEndpoint(endpoint, options)
+}
 
 // The ledger names the acting user by the token's subject, and nothing else in the gateway
 // response carries it, so the one place it can be read is the token itself.
@@ -66,8 +76,10 @@ const subjectOf = (accessToken: string): string => {
   return subject
 }
 
+// The secret is part of the key because it is what the token is minted with: a changed secret
+// has to open a new session rather than reuse the one the old secret bought.
 const sessionKey = (target: LedgerTarget): string =>
-  `${target.gatewayUrl}|${target.networkId ?? ''}`
+  `${target.gatewayUrl}|${target.networkId ?? ''}|${target.clientSecret}`
 
 const sessions = new Map<string, Promise<LedgerSession>>()
 
@@ -109,8 +121,7 @@ const openSession = async (target: LedgerTarget): Promise<LedgerSession> => {
   }
 }
 
-export const ledgerSession = async (options?: LedgerRequestOptions): Promise<LedgerSession> => {
-  const target = await resolveTarget(options)
+const sessionFor = async (target: LedgerTarget): Promise<LedgerSession> => {
   const key = sessionKey(target)
   const existing = sessions.get(key)
   if (existing !== undefined) {
@@ -123,6 +134,9 @@ export const ledgerSession = async (options?: LedgerRequestOptions): Promise<Led
   sessions.set(key, opened)
   return await opened
 }
+
+export const ledgerSession = async (options?: LedgerRequestOptions): Promise<LedgerSession> =>
+  await sessionFor(await resolveTarget(options))
 
 export const forgetLedgerSessions = (): void => {
   sessions.clear()
@@ -190,12 +204,14 @@ export const ledgerApi = async <T>(
   },
   options?: LedgerRequestOptions,
 ): Promise<T> => {
-  const first = await sendLedgerRequest(await ledgerSession(options), params)
+  const target = await resolveTarget(options)
+  const first = await sendLedgerRequest(await sessionFor(target), params)
   // A minted token outlives most sessions but not all of them, and the participant is the only
-  // thing that knows it expired, so one 401 buys a fresh token instead of a failed read.
+  // thing that knows it expired, so one 401 buys a fresh token instead of a failed read. Only
+  // this target's session is dropped: the other endpoints' tokens did not expire.
   const retry = async (): Promise<Response> => {
-    forgetLedgerSessions()
-    return await sendLedgerRequest(await ledgerSession(options), params)
+    sessions.delete(sessionKey(target))
+    return await sendLedgerRequest(await sessionFor(target), params)
   }
   const response = first.status === 401 ? await retry() : first
 

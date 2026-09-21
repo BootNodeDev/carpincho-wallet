@@ -12,8 +12,6 @@ import { SecondaryButton } from '@/components/ui/Button'
 import { CHEVRON_RIGHT_ICON, RECEIVE_ICON, SEND_ICON } from '@/components/ui/icons'
 import { SectionLabel } from '@/components/ui/SectionLabel'
 import { Sheet } from '@/components/ui/Sheet'
-import { useTokenHoldingDetails } from '@/hooks/useTokenHoldingDetails'
-import type { Cip56HoldingsApi } from '@/hooks/useTokenHoldings'
 import { sortAccounts } from '@/utils/account'
 import type { AccountPublic } from '@/vault/types'
 import { useVault } from '@/vault/useVault'
@@ -25,15 +23,12 @@ export interface TokenDetailSheetProps {
   onOpenChange: (open: boolean) => void
   account: AccountPublic
   summary: TokenHoldingSummary
-  holdingsApi?: Cip56HoldingsApi
   sendApi?: Cip56SendApi
 }
 
 interface DetailScreenProps {
   summary: TokenHoldingSummary
   holdings: TokenHolding[]
-  loading: boolean
-  error?: string
   onSend: () => void
   onReceive: () => void
   onOpenHolding: (holding: TokenHolding) => void
@@ -80,8 +75,6 @@ const HoldingListRow = ({
 const DetailScreen = ({
   summary,
   holdings,
-  loading,
-  error,
   onSend,
   onReceive,
   onOpenHolding,
@@ -123,13 +116,7 @@ const DetailScreen = ({
     <div className="flex min-h-0 flex-col gap-2">
       <SectionLabel>Holdings</SectionLabel>
       <div className="-mx-1 flex h-60 flex-col gap-2 overflow-y-auto px-1">
-        {loading && holdings.length === 0 ? (
-          <p className="m-0 px-1 text-[0.82rem] text-muted-foreground">Loading UTXOs</p>
-        ) : error !== undefined ? (
-          <div className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-[0.82rem] text-danger">
-            {error}
-          </div>
-        ) : holdings.length === 0 ? (
+        {holdings.length === 0 ? (
           <p className="m-0 px-1 text-[0.82rem] text-muted-foreground">No UTXO details</p>
         ) : (
           holdings.map((holding) => (
@@ -152,7 +139,6 @@ export const TokenDetailSheet = ({
   onOpenChange,
   account,
   summary,
-  holdingsApi,
   sendApi,
 }: TokenDetailSheetProps): JSX.Element => {
   const vault = useVault()
@@ -176,14 +162,9 @@ export const TokenDetailSheet = ({
     target?.focus()
   }, [open, screen])
 
-  const detailsApi =
-    holdingsApi?.listTokenHoldings === undefined
-      ? undefined
-      : { listTokenHoldings: holdingsApi.listTokenHoldings }
-  const { holdings, loading, error } = useTokenHoldingDetails(account, summary, {
-    api: detailsApi,
-    enabled: open,
-  })
+  // A summary is the UTXOs it was added up from, so the list is already here: the balance poll
+  // that filled the token row is the same read a detail screen would have made.
+  const holdings = useMemo(() => summary.holdings ?? [], [summary.holdings])
 
   // Spendable balance excludes locked holdings, which would fail on send.
   const spendableBalance = useMemo(
@@ -272,8 +253,6 @@ export const TokenDetailSheet = ({
           <DetailScreen
             summary={summary}
             holdings={holdings}
-            loading={loading}
-            error={error}
             onSend={() => goTo('send')}
             onReceive={() => goTo('receive')}
             onOpenHolding={openHolding}

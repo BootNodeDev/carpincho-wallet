@@ -121,32 +121,32 @@ describe('AssetsPanel', () => {
     assert.equal(screen.queryByRole('button', { name: /show holdings/i }), null)
   })
 
-  it('opens the token detail modal and fetches UTXOs on demand', async () => {
-    // Scenario: clicking a token row opens the balance-first modal, which lazily
-    // loads the raw UTXOs for the holdings list.
-    let detailsCalls = 0
+  it('opens the token detail modal and lists the UTXOs the summary carries', async () => {
+    // Scenario: a summary is the UTXOs it was added up from, so opening the modal renders
+    // them from the balance poll's own answer rather than making a second read.
     const api: Cip56HoldingsApi = {
-      listTokenHoldingSummaries: async () => [
-        {
-          key: 'dso::party:Amulet',
-          tokenLabel: 'Amulet',
-          instrumentId: { admin: 'dso::party', id: 'Amulet' },
-          totalAmount: '15.75',
-          source: 'scan',
-        },
-      ],
-      listTokenHoldings: async (partyId) => {
-        detailsCalls += 1
+      listTokenHoldingSummaries: async (partyId) => {
         assert.equal(partyId, 'alice::party')
         return [
           {
-            contractId: 'holding-cid-1',
-            interfaceViewValue: {
-              owner: 'alice::party',
-              amount: '12.5000000000',
-              instrumentId: { admin: 'dso::party', id: 'Amulet' },
-              lock: null,
-            },
+            key: 'dso::party:Amulet',
+            tokenLabel: 'Amulet',
+            instrumentId: { admin: 'dso::party', id: 'Amulet' },
+            totalAmount: '15.75',
+            utxoCount: 1,
+            lockedCount: 0,
+            unlockedCount: 1,
+            holdings: [
+              {
+                contractId: 'cached-holding-cid',
+                interfaceViewValue: {
+                  owner: 'alice::party',
+                  amount: '12.5000000000',
+                  instrumentId: { admin: 'dso::party', id: 'Amulet' },
+                  lock: null,
+                },
+              },
+            ],
           },
         ]
       },
@@ -154,57 +154,10 @@ describe('AssetsPanel', () => {
 
     renderAssets(api)
 
-    assert.equal(detailsCalls, 0)
     await clickTokenRow('Amulet')
 
     await screen.findAllByText('15.75')
     await screen.findByText('12.50')
-    assert.equal(detailsCalls, 1)
-  })
-
-  it('reuses fallback UTXO details from the summary response', async () => {
-    // Scenario: when the summary read falls back from Scan to UTXOs, the summary
-    // already carries raw holdings, so opening the modal must not refetch them.
-    let detailsCalls = 0
-    const api: Cip56HoldingsApi = {
-      listTokenHoldingSummaries: async () => [
-        {
-          key: 'dso::party:Amulet',
-          tokenLabel: 'Amulet',
-          instrumentId: { admin: 'dso::party', id: 'Amulet' },
-          totalAmount: '15.75',
-          utxoCount: 1,
-          lockedCount: 0,
-          unlockedCount: 1,
-          source: 'utxos',
-          holdings: [
-            {
-              contractId: 'cached-holding-cid',
-              interfaceViewValue: {
-                owner: 'alice::party',
-                amount: '15.7500000000',
-                instrumentId: { admin: 'dso::party', id: 'Amulet' },
-                lock: null,
-              },
-            },
-          ],
-        },
-      ],
-      listTokenHoldings: async () => {
-        detailsCalls += 1
-        return []
-      },
-    }
-
-    renderAssets(api)
-
-    await clickTokenRow('Amulet')
-
-    // Both the balance and the lone cached holding format to 15.75; two matches with
-    // no detail fetch proves the cached UTXO rendered without a round trip.
-    const matches = await screen.findAllByText('15.75')
-    assert.ok(matches.length >= 2)
-    assert.equal(detailsCalls, 0)
   })
 
   it('shows a spinner while holdings are loading instead of blank space', async () => {

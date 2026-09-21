@@ -116,7 +116,7 @@ describe('useProviderRequestHandler', () => {
     assert.deepEqual(errors, [{ code: -32000, message: 'no account available' }])
   })
 
-  it('bridges a prepare-execute approval into pending-execute state with normalized params', async () => {
+  it('bridges a prepare-execute approval into pending-execute state', async () => {
     const { responder } = makeResponder()
     const { handler, executes } = setup(() => ({ accounts: [account()], primary: null }))
 
@@ -133,9 +133,9 @@ describe('useProviderRequestHandler', () => {
     }
     assert.equal(pending.method, 'prepareExecute')
     assert.equal(pending.rawMethod, 'canton_prepareSignExecute')
-    // executeParams injects the acting party so the participant prepare has actAs/partyId.
-    assert.equal(pending.params.partyId, account().partyId)
-    assert.deepEqual(pending.params.actAs, [account().partyId])
+    // The dApp's params travel as sent: the prepare call acts as the signing party, and the
+    // approval modal shows what was asked for rather than a rewritten copy of it.
+    assert.deepEqual(pending.params, { commands: [{ Create: {} }] })
   })
 
   it('does not create pending state for a directly-handled method', async () => {

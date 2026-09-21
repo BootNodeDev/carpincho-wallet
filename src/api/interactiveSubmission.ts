@@ -1,3 +1,4 @@
+import { namespaceOf } from '@/ledger/externalParty'
 import { ledgerApi, ledgerSession, ledgerSynchronizerId } from '@/ledger/ledgerApi'
 import type { AccountPublic } from '@/vault/types'
 import type { VaultContextValue } from '@/vault/VaultContext'
@@ -26,27 +27,24 @@ export interface ExecutePreparedCommandsParams {
   summary: string
   commandId?: string
   submissionId?: string
-  synchronizerId?: string
   signMessage: VaultContextValue['signMessage']
   recordTransaction?: VaultContextValue['recordTransaction']
-  // A dApp watching `txChanged` is told between the steps, not after them, so the two points
-  // where the transaction changes hands are the ones a caller can hook.
-  onPrepared?: (prepared: { preparedTransactionHash: string }) => void
+  // A dApp watching `txChanged` is told between the steps, not after them, so the point where
+  // the transaction changes hands is the one a caller can hook.
   onSigned?: (signed: { preparedTransactionHash: string; signatureBase64: string }) => void
 }
 
-// An external party's namespace is the fingerprint of the key that authorizes it, and the party
-// id carries it after the `::`. That fingerprint is what the ledger expects in `signedBy`.
-export const signingFingerprint = (partyId: string): string => {
-  const fingerprint = partyId.split('::').slice(1).join('::')
-  if (fingerprint === '') {
-    throw new Error(`party id "${partyId}" carries no namespace fingerprint`)
+// A command builder that produced nothing has failed, and the participant reads `[null]` as a
+// malformed command rather than as an empty submission, so it is refused here.
+const asCommandList = (commands: unknown): unknown[] => {
+  if (Array.isArray(commands)) {
+    return commands
   }
-  return fingerprint
+  if (commands === undefined || commands === null) {
+    throw new Error('no commands to submit')
+  }
+  return [commands]
 }
-
-const asCommandList = (commands: unknown): unknown[] =>
-  Array.isArray(commands) ? commands : [commands]
 
 // Executes Canton interactive submission while Carpincho keeps private-key signing local.
 export const executePreparedCommands = async ({
@@ -57,10 +55,8 @@ export const executePreparedCommands = async ({
   summary,
   commandId,
   submissionId,
-  synchronizerId,
   signMessage,
   recordTransaction,
-  onPrepared,
   onSigned,
 }: ExecutePreparedCommandsParams): Promise<ExecutePreparedResponse> => {
   const session = await ledgerSession()
@@ -76,13 +72,12 @@ export const executePreparedCommands = async ({
       actAs: [account.partyId],
       readAs: [],
       disclosedContracts: disclosedContracts ?? [],
-      synchronizerId: synchronizerId ?? (await ledgerSynchronizerId()),
+      synchronizerId: await ledgerSynchronizerId(),
       verboseHashing: false,
       packageIdSelectionPreference: [],
     },
   })
 
-  onPrepared?.({ preparedTransactionHash: prepared.preparedTransactionHash })
   const signatureBase64 = await signMessage(account.id, prepared.preparedTransactionHash)
   onSigned?.({ preparedTransactionHash: prepared.preparedTransactionHash, signatureBase64 })
   const executed = await ledgerApi<ExecutePreparedResponse>({
@@ -101,7 +96,7 @@ export const executePreparedCommands = async ({
             signatures: [
               {
                 signature: signatureBase64,
-                signedBy: signingFingerprint(account.partyId),
+                signedBy: namespaceOf(account.partyId),
                 format: 'SIGNATURE_FORMAT_CONCAT',
                 signingAlgorithmSpec: 'SIGNING_ALGORITHM_SPEC_ED25519',
               },
