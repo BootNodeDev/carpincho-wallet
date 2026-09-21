@@ -6,6 +6,7 @@ import {
   commandSummary,
   executeParams,
   optionalString,
+  requestedActAs,
   transactionCommands,
 } from '@/views/home/transactionSummary'
 
@@ -18,6 +19,23 @@ describe('executeParams', () => {
   it('reads anything that is not a plain object as empty params', () => {
     assert.deepEqual(executeParams(null), {})
     assert.deepEqual(executeParams(['ignored']), {})
+  })
+})
+
+describe('requestedActAs', () => {
+  it('reads the party a dApp asks to act as', () => {
+    assert.equal(requestedActAs({ actAs: ['bob::fp'] }), 'bob::fp')
+  })
+
+  it('takes the first party when a request names several', () => {
+    assert.equal(requestedActAs({ actAs: ['bob::fp', 'alice::fp'] }), 'bob::fp')
+  })
+
+  it('is undefined when the dApp names no party, leaving the choice to the wallet', () => {
+    assert.equal(requestedActAs({}), undefined)
+    assert.equal(requestedActAs({ actAs: [] }), undefined)
+    assert.equal(requestedActAs({ actAs: 'bob::fp' }), undefined)
+    assert.equal(requestedActAs({ actAs: [42] }), undefined)
   })
 })
 

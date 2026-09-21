@@ -12,7 +12,7 @@ import {
   normalizeMethod,
 } from '@/provider/methods'
 import type { AccountResolver } from '@/provider/types'
-import { executeParams } from '@/views/home/transactionSummary'
+import { executeParams, requestedActAs } from '@/views/home/transactionSummary'
 import type {
   PendingConnectRequest,
   PendingExecuteRequest,
@@ -70,15 +70,27 @@ export const useProviderRequestHandler = (
         (result.pendingMethod === CANTON_METHOD_PREPARE_EXECUTE ||
           result.pendingMethod === CANTON_METHOD_PREPARE_EXECUTE_AND_WAIT)
       ) {
-        const account = selectedAccount(resolveAccounts())
+        const params = executeParams(request.params)
+        const snapshot = resolveAccounts()
+        // A dApp naming its own actAs decides the signing party: the wallet either holds it or
+        // refuses. Signing as whoever happens to be selected is how a request went out for a
+        // party the ledger no longer hosts while the UI showed another one.
+        const requested = requestedActAs(params)
+        const account =
+          requested === undefined
+            ? selectedAccount(snapshot)
+            : snapshot.accounts.find((a) => a.partyId === requested)
         if (account === undefined) {
-          await responder.error(-32000, 'no account available')
+          await responder.error(
+            -32000,
+            requested === undefined ? 'no account available' : `wallet does not hold ${requested}`,
+          )
           return
         }
         setPendingExecute({
           account,
           method: result.pendingMethod,
-          params: executeParams(request.params),
+          params,
           rawMethod: context.rawMethod ?? request.method,
           origin: context.origin,
           responder,

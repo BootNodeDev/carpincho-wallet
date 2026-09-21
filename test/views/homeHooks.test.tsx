@@ -138,6 +138,37 @@ describe('useProviderRequestHandler', () => {
     assert.deepEqual(pending.params, { commands: [{ Create: {} }] })
   })
 
+  it('binds a prepare-execute to the party the dApp asked to act as, not the primary', async () => {
+    const { responder } = makeResponder()
+    const primary = account({ id: 'acc-1', partyId: 'stale::1220dead' })
+    const asked = account({ id: 'acc-2', name: 'fresh', partyId: 'fresh::1220beef' })
+    const { handler, executes } = setup(() => ({ accounts: [primary, asked], primary }))
+
+    await handler(
+      { method: 'prepareExecute', params: { commands: [], actAs: ['fresh::1220beef'] } },
+      responder,
+      {},
+    )
+
+    assert.equal(executes.length, 1)
+    assert.equal((executes[0] as { account: AccountPublic }).account.id, 'acc-2')
+  })
+
+  it('refuses a prepare-execute for a party the wallet does not hold', async () => {
+    const { responder, errors } = makeResponder()
+    const { handler, executes } = setup(() => ({ accounts: [account()], primary: null }))
+
+    await handler(
+      { method: 'prepareExecute', params: { commands: [], actAs: ['gone::1220dead'] } },
+      responder,
+      {},
+    )
+
+    // Signing as whoever happens to be selected is the bug: an unheld party is a refusal.
+    assert.equal(executes.length, 0)
+    assert.deepEqual(errors, [{ code: -32000, message: 'wallet does not hold gone::1220dead' }])
+  })
+
   it('does not create pending state for a directly-handled method', async () => {
     const { responder, results } = makeResponder()
     const { handler, signs, executes } = setup(() => ({ accounts: [account()], primary: null }))
